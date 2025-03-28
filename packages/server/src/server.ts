@@ -38,19 +38,7 @@ if (require.main === module) {
   const app = express();
   app.use(
     cors({
-      origin:
-        process.env.NODE_ENV === "production"
-          ? "*" // Allow all origins in production
-          : [
-              "http://localhost:3000",
-              "http://127.0.0.1:3000",
-              "http://localhost:3001",
-              "http://localhost:3002",
-              "http://localhost:3003",
-              "http://localhost:3004",
-              "http://localhost:3005",
-              "http://localhost:3006",
-            ],
+      origin: "*", // Allow all origins
       methods: ["GET", "POST"],
       credentials: true,
     })
@@ -62,19 +50,7 @@ if (require.main === module) {
   // Create Socket.IO server with CORS configuration
   const io = new Server(httpServer, {
     cors: {
-      origin:
-        process.env.NODE_ENV === "production"
-          ? "*" // Allow all origins in production
-          : [
-              "http://localhost:3000",
-              "http://127.0.0.1:3000",
-              "http://localhost:3001",
-              "http://localhost:3002",
-              "http://localhost:3003",
-              "http://localhost:3004",
-              "http://localhost:3005",
-              "http://localhost:3006",
-            ],
+      origin: "*", // Allow all origins
       methods: ["GET", "POST"],
       credentials: true,
     },

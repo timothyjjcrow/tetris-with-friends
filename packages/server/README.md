@@ -1,6 +1,75 @@
 # Tetris Game Server
 
-This is the server component of the Tetris game. It handles game state, scoring, and multiplayer functionality.
+This is the server component for the Tetris with Friends multiplayer game. It provides WebSocket connections via Socket.IO to enable real-time multiplayer gameplay.
+
+## Features
+
+- Real-time multiplayer gameplay
+- Room management for hosting and joining games
+- Game state synchronization
+- Bot players for single-player practice
+
+## Deployment
+
+### Deploying to Vercel
+
+1. Make sure you have the Vercel CLI installed:
+
+   ```
+   npm install -g vercel
+   ```
+
+2. Login to Vercel:
+
+   ```
+   vercel login
+   ```
+
+3. Deploy the server:
+
+   ```
+   cd packages/server
+   vercel
+   ```
+
+4. For production deployment:
+   ```
+   vercel --prod
+   ```
+
+After deployment, copy the deployment URL and update it in the client's `.env.production` file:
+
+```
+VITE_SERVER_URL=https://your-deployment-url.vercel.app
+```
+
+## Development
+
+Run the server locally:
+
+```
+npm run dev
+```
+
+The server will start on port 3001 by default.
+
+## API Endpoints
+
+- `GET /health` - Health check
+- `GET /status` - Server status and statistics
+
+## WebSocket Events
+
+The server uses Socket.IO for real-time communication. Key events include:
+
+- `connect` - Client connection
+- `disconnect` - Client disconnection
+- `createRoom` - Create a new game room
+- `joinRoom` - Join an existing game room
+- `gameStateUpdate` - Update game state
+- `playerAction` - Handle player actions (move, rotate, etc.)
+- `sendAttack` - Send an attack to opponents
+- `receiveGarbage` - Receive garbage lines from opponents
 
 ## Scoring System
 

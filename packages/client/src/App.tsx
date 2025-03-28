@@ -146,17 +146,10 @@ function App() {
     let serverUrl: string;
 
     if (isProduction) {
-      // Use the server URL from environment variable if available
+      // Use our Vercel-hosted server
       serverUrl =
-        import.meta.env.VITE_SERVER_URL ||
-        "https://tetris-with-friends-server.onrender.com";
-
-      // Fallback option if the primary one doesn't work
-      const fallbackUrl = "https://tetris-with-friends-api.onrender.com";
-
-      console.log(
-        `Using production server URL: ${serverUrl} with fallback: ${fallbackUrl}`
-      );
+        import.meta.env.VITE_SERVER_URL || "https://tetris-server.vercel.app";
+      console.log(`Using production server URL: ${serverUrl}`);
     } else {
       // Local development
       serverUrl = "http://localhost:3001";
