@@ -1,13 +1,4 @@
 import React, { useEffect, useState } from "react";
-import { COLORS } from "../styles/colors";
-
-// Define Cell type for client-side representation
-interface Cell {
-  value: 0 | 1;
-  color: string | null;
-  isGarbage?: boolean;
-  isGhost?: boolean;
-}
 
 export interface Position {
   x: number;

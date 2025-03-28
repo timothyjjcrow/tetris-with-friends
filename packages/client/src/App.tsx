@@ -66,6 +66,8 @@ interface ExtendedGameState extends GameState {
   canHold: boolean;
   pieceQueue: Piece[];
   players: any[];
+  status: GameStatus;
+  opponents?: OpponentData[];
   player: {
     id: string;
     name: string;
