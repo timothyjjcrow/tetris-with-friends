@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { Manager, Socket as SocketType } from "socket.io-client";
+import { Socket as SocketType } from "socket.io-client";
 import io from "socket.io-client";
 import GameBoard from "./components/GameBoard";
 import { PiecePreview } from "./components/PiecePreview";
