@@ -144,12 +144,22 @@ function App() {
     // Determine the appropriate server URL based on environment
     const isProduction = window.location.hostname !== "localhost";
     let serverUrl: string;
+    let fallbackUrl: string | null = null;
 
     if (isProduction) {
-      // Use our Vercel-hosted server
+      // Use the server URL from environment variable if available
       serverUrl =
-        import.meta.env.VITE_SERVER_URL || "https://tetris-server.vercel.app";
-      console.log(`Using production server URL: ${serverUrl}`);
+        import.meta.env.VITE_SERVER_URL ||
+        "https://tetris-with-friends-server-production.up.railway.app";
+
+      // If we have a fallback URL configured, use it
+      fallbackUrl =
+        import.meta.env.VITE_FALLBACK_SERVER_URL ||
+        "https://tetris-with-friends-api.onrender.com";
+
+      console.log(
+        `Using production server URL: ${serverUrl} with fallback: ${fallbackUrl}`
+      );
     } else {
       // Local development
       serverUrl = "http://localhost:3001";
@@ -161,10 +171,9 @@ function App() {
     // Connect to the Socket.IO server with robust configuration
     const manager = new Manager(serverUrl, {
       reconnectionDelayMax: 10000,
-      reconnectionAttempts: 10,
-      timeout: 20000, // Longer timeout for initial connection
+      reconnectionAttempts: 5,
+      timeout: 15000, // Shortened timeout for faster fallback
       transports: ["websocket", "polling"], // Try websocket first, fall back to polling
-      path: serverUrl.includes("/api/socket") ? "/api/socket" : undefined,
       forceNew: true, // Force a new connection
       autoConnect: true,
     });
@@ -178,13 +187,60 @@ function App() {
     // Set up a timeout for connection attempts
     const connectionTimeout = setTimeout(() => {
       if (connecting) {
-        console.error("Connection attempt timed out after 20 seconds");
+        console.error("Connection attempt timed out after 15 seconds");
+
+        if (isProduction && fallbackUrl) {
+          // Try fallback if primary times out
+          tryFallbackConnection(fallbackUrl, connectionTimeout);
+        } else {
+          setConnectionError(
+            "Connection timed out. Please check your internet connection and try again."
+          );
+          setConnecting(false);
+        }
+      }
+    }, 15000);
+
+    // Function to try fallback connection
+    const tryFallbackConnection = (
+      fallbackUrl: string,
+      timeoutId: NodeJS.Timeout
+    ) => {
+      console.log("Primary server connection failed, trying fallback...");
+
+      // Clean up the current connection attempt
+      clearTimeout(timeoutId);
+      newSocket.disconnect();
+
+      console.log(`Attempting fallback connection to: ${fallbackUrl}`);
+
+      const fallbackManager = new Manager(fallbackUrl, {
+        reconnectionDelayMax: 10000,
+        reconnectionAttempts: 3,
+        timeout: 10000,
+        transports: ["websocket", "polling"],
+        forceNew: true,
+        autoConnect: true,
+      });
+
+      const fallbackSocket = fallbackManager.socket("/");
+
+      // Set up fallback connection handlers
+      fallbackSocket.on("connect", () => {
+        console.log("Connected to fallback server with ID:", fallbackSocket.id);
+        setConnecting(false);
+        setConnectionError(null);
+        setSocket(fallbackSocket);
+      });
+
+      fallbackSocket.on("connect_error", (fallbackError: Error) => {
+        console.error("Fallback connection error:", fallbackError);
         setConnectionError(
-          "Connection timed out. Please check your internet connection and try again."
+          `Could not connect to game servers. Please try again later.`
         );
         setConnecting(false);
-      }
-    }, 20000);
+      });
+    };
 
     // Connection event handlers
     newSocket.on("connect", () => {
@@ -192,52 +248,15 @@ function App() {
       clearTimeout(connectionTimeout);
       setConnecting(false);
       setConnectionError(null);
+      setSocket(newSocket);
     });
 
     newSocket.on("connect_error", (error: Error) => {
       console.error("Connection error:", error);
 
-      // If in production and using the primary URL, try fallback
-      if (isProduction && serverUrl === import.meta.env.VITE_SERVER_URL) {
-        console.log("Primary server connection failed, trying fallback...");
-        // Clean up the current connection attempt
-        clearTimeout(connectionTimeout);
-        newSocket.disconnect();
-
-        // Try the fallback URL
-        const fallbackUrl = "https://tetris-with-friends-api.onrender.com";
-        console.log(`Attempting fallback connection to: ${fallbackUrl}`);
-
-        const fallbackManager = new Manager(fallbackUrl, {
-          reconnectionDelayMax: 10000,
-          reconnectionAttempts: 5,
-          timeout: 15000,
-          transports: ["websocket", "polling"],
-          forceNew: true,
-          autoConnect: true,
-        });
-
-        const fallbackSocket = fallbackManager.socket("/");
-
-        // Set up fallback connection handlers
-        fallbackSocket.on("connect", () => {
-          console.log(
-            "Connected to fallback server with ID:",
-            fallbackSocket.id
-          );
-          setConnecting(false);
-          setConnectionError(null);
-          setSocket(fallbackSocket);
-        });
-
-        fallbackSocket.on("connect_error", (fallbackError: Error) => {
-          console.error("Fallback connection error:", fallbackError);
-          setConnectionError(
-            `Could not connect to game servers. Please try again later.`
-          );
-          setConnecting(false);
-        });
-
+      // If in production and we have a fallback URL, try it
+      if (isProduction && fallbackUrl) {
+        tryFallbackConnection(fallbackUrl, connectionTimeout);
         return;
       }
 

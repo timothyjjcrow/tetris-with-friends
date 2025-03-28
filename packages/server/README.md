@@ -11,37 +11,84 @@ This is the server component for the Tetris with Friends multiplayer game. It pr
 
 ## Deployment
 
-### Deploying to Vercel
+### Deploying to Railway (Recommended for WebSockets)
+
+Railway is recommended for WebSocket applications as it supports long-lived connections.
+
+## Deploying the Tetris Server to Railway
+
+Follow these steps to deploy the Tetris server to Railway:
+
+1. Make sure you're in the server directory:
+
+   ```
+   cd packages/server
+   ```
+
+2. If you haven't already, install the Railway CLI:
+
+   ```
+   npm i -g @railway/cli
+   ```
+
+3. Login to Railway:
+
+   ```
+   railway login
+   ```
+
+4. Create a new project on Railway:
+
+   ```
+   railway init
+   ```
+
+   - Name your project (e.g., "tetris-with-friends-server")
+
+5. Create environment variables:
+
+   ```
+   railway vars set PORT=3001
+   railway vars set NODE_ENV=production
+   ```
+
+6. Deploy the server:
+
+   ```
+   railway up
+   ```
+
+7. Get your deployment URL:
+
+   ```
+   railway domain
+   ```
+
+8. Update the client's `.env.production` file with the Railway URL:
+
+   ```
+   VITE_SERVER_URL=https://your-railway-url.up.railway.app
+   ```
+
+9. Commit and push your changes to deploy the client with the updated server URL.
+
+### Deploying to Vercel (Not recommended for WebSockets)
+
+**Note:** Vercel serverless functions do not support long-lived WebSocket connections. This deployment option is provided for API endpoints only.
 
 1. Make sure you have the Vercel CLI installed:
-
    ```
    npm install -g vercel
    ```
-
 2. Login to Vercel:
-
    ```
    vercel login
    ```
-
 3. Deploy the server:
-
    ```
    cd packages/server
    vercel
    ```
-
-4. For production deployment:
-   ```
-   vercel --prod
-   ```
-
-After deployment, copy the deployment URL and update it in the client's `.env.production` file:
-
-```
-VITE_SERVER_URL=https://your-deployment-url.vercel.app
-```
 
 ## Development
 
