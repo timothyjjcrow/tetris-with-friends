@@ -14,35 +14,14 @@ interface OpponentBoardProps {
   opponent: OpponentData;
 }
 
+// Type definition for a board cell
+type BoardCell = number;
+
 const OpponentBoard: React.FC<OpponentBoardProps> = ({ opponent }) => {
-  const { name, score, level, board, status, currentPiece } = opponent;
+  const { name, score, level, status, currentPiece } = opponent;
 
-  // Create a display board by combining the static board and current piece
-  const displayBoard = board.map((row) => [...row]);
-
-  // Add current piece to the display board
-  if (currentPiece && status === GameStatus.PLAYING) {
-    const { shape, position, type } = currentPiece;
-
-    shape.forEach((row, y) => {
-      row.forEach((cell, x) => {
-        if (cell !== 0) {
-          const boardX = position.x + x;
-          const boardY = position.y + y;
-
-          // Only place the piece if it's within board boundaries
-          if (
-            boardY >= 0 &&
-            boardY < displayBoard.length &&
-            boardX >= 0 &&
-            boardX < displayBoard[0].length
-          ) {
-            displayBoard[boardY][boardX] = true;
-          }
-        }
-      });
-    });
-  }
+  // Cast board to the right type
+  const board = opponent.board as unknown as BoardCell[][];
 
   // Get cell size based on board dimensions
   const CELL_SIZE = 6; // Small cells for the opponent board
@@ -51,6 +30,41 @@ const OpponentBoard: React.FC<OpponentBoardProps> = ({ opponent }) => {
   const pieceColor = currentPiece?.type
     ? getPieceGradient(currentPiece.type)
     : COLORS.pieces.I.base;
+
+  // Function to check if a position has the current piece
+  const hasPiece = (x: number, y: number): boolean => {
+    if (!currentPiece || status !== GameStatus.PLAYING) return false;
+
+    const { shape, position } = currentPiece;
+    const pieceX = x - position.x;
+    const pieceY = y - position.y;
+
+    if (
+      pieceX >= 0 &&
+      pieceX < shape[0].length &&
+      pieceY >= 0 &&
+      pieceY < shape.length
+    ) {
+      return shape[pieceY][pieceX] !== 0;
+    }
+
+    return false;
+  };
+
+  // Function to determine cell styling
+  const getCellStyle = (cell: BoardCell, x: number, y: number) => {
+    const isPieceHere = hasPiece(x, y);
+    const isActive = cell !== 0 || isPieceHere;
+
+    return {
+      width: CELL_SIZE,
+      height: CELL_SIZE,
+      background: isActive ? pieceColor : COLORS.board.emptyCell,
+      boxShadow: isActive
+        ? "inset 1px 1px 1px rgba(255,255,255,0.2), inset -1px -1px 1px rgba(0,0,0,0.2)"
+        : "",
+    };
+  };
 
   return (
     <div className="bg-slate-800 p-3 rounded-md shadow-md border border-slate-700 hover:scale-105 transition-transform duration-200">
@@ -75,28 +89,25 @@ const OpponentBoard: React.FC<OpponentBoardProps> = ({ opponent }) => {
         <div
           className="grid gap-px bg-slate-900 rounded p-1"
           style={{
-            gridTemplateColumns: `repeat(${displayBoard[0].length}, ${CELL_SIZE}px)`,
-            gridTemplateRows: `repeat(${displayBoard.length}, ${CELL_SIZE}px)`,
+            gridTemplateColumns: `repeat(${board[0].length}, ${CELL_SIZE}px)`,
+            gridTemplateRows: `repeat(${board.length}, ${CELL_SIZE}px)`,
           }}
         >
-          {displayBoard.map((row, rowIndex) =>
-            row.map((cell, colIndex) => (
-              <div
-                key={`${rowIndex}-${colIndex}`}
-                className={`
-                  w-full h-full 
-                  ${cell ? "shadow-sm" : "bg-slate-800"}
-                `}
-                style={{
-                  width: CELL_SIZE,
-                  height: CELL_SIZE,
-                  background: cell ? pieceColor : COLORS.board.emptyCell,
-                  boxShadow: cell
-                    ? "inset 1px 1px 1px rgba(255,255,255,0.2), inset -1px -1px 1px rgba(0,0,0,0.2)"
-                    : "",
-                }}
-              />
-            ))
+          {board.map((row: BoardCell[], rowIndex: number) =>
+            row.map((cell: BoardCell, colIndex: number) => {
+              const isActive = cell !== 0 || hasPiece(colIndex, rowIndex);
+
+              return (
+                <div
+                  key={`${rowIndex}-${colIndex}`}
+                  className={`
+                    w-full h-full 
+                    ${isActive ? "shadow-sm" : "bg-slate-800"}
+                  `}
+                  style={getCellStyle(cell, colIndex, rowIndex)}
+                />
+              );
+            })
           )}
         </div>
       </div>
