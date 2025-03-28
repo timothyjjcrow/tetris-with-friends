@@ -131,6 +131,9 @@ function App() {
   const [connecting, setConnecting] = useState<boolean>(false);
   const [connectionError, setConnectionError] = useState<string | null>(null);
 
+  // Add state to prevent multiple connection attempts
+  const [hasInitialized, setHasInitialized] = useState<boolean>(false);
+
   // Add a state to track the current view/mode
   const [gameMode, setGameMode] = useState<
     "menu" | "singleplayer" | "multiplayer" | "offline"
@@ -139,8 +142,14 @@ function App() {
 
   // Initialize Socket.IO connection
   const initializeConnection = useCallback(() => {
+    // Don't attempt to connect if we're already connecting or connected
+    if (connecting || (socket && socket.connected) || hasInitialized) {
+      return;
+    }
+
     setConnecting(true);
     setConnectionError(null);
+    setHasInitialized(true);
 
     // If there's an existing socket, disconnect it first
     if (socket) {
@@ -153,20 +162,20 @@ function App() {
       import.meta.env.VITE_SERVER_URL ||
       (window.location.hostname === "localhost"
         ? "http://localhost:3001"
-        : "https://tetris-server-production.up.railway.app");
+        : "https://grave-rapid-empress.glitch.me");
 
     console.log(`Connecting to server at: ${serverUrl}`);
 
     // Try to establish a simple connection first
     trySimpleConnection(serverUrl);
-  }, [socket]);
+  }, [socket, connecting, hasInitialized]);
 
   // Function to try a simple socket.io connection
   const trySimpleConnection = (serverUrl: string) => {
     console.log("Attempting simple direct connection...");
 
     // Simple connection with minimal options
-    const socket = io(serverUrl, {
+    const newSocket = io(serverUrl, {
       transports: ["websocket", "polling"],
       reconnection: false,
       timeout: 8000,
@@ -176,43 +185,46 @@ function App() {
     const connectionTimeout = setTimeout(() => {
       if (connecting) {
         console.error("Connection attempt timed out");
-        socket.disconnect();
+        newSocket.disconnect();
         setConnectionError(
           "Connection timed out. Please check your internet connection and try again."
         );
         setConnecting(false);
+        setHasInitialized(false);
       }
     }, 8000);
 
     // Connection event handlers
-    socket.on("connect", () => {
-      console.log("Connected to server with ID:", socket.id);
+    newSocket.on("connect", () => {
+      console.log("Connected to server with ID:", newSocket.id);
       clearTimeout(connectionTimeout);
       setConnecting(false);
       setConnectionError(null);
-      setSocket(socket);
+      setSocket(newSocket);
 
-      // Add additional event listeners after successful connection
-      setupEventListeners(socket);
+      // Only set up minimal essential event listeners after connection
+      setupEventListeners(newSocket);
     });
 
-    socket.on("connect_error", (error: Error) => {
+    newSocket.on("connect_error", (error: Error) => {
       console.error("Connection error:", error);
-      socket.disconnect();
+      newSocket.disconnect();
       setConnectionError(
         `Connection error: ${error.message}. Please try again later.`
       );
       setConnecting(false);
+      setHasInitialized(false);
       clearTimeout(connectionTimeout);
     });
 
-    socket.on("error", (error: Error) => {
+    newSocket.on("error", (error: Error) => {
       console.error("Socket error:", error);
       setConnectionError(`Socket error: ${error.message}`);
+      setHasInitialized(false);
       clearTimeout(connectionTimeout);
     });
 
-    socket.on("disconnect", (reason: string) => {
+    newSocket.on("disconnect", (reason: string) => {
       console.log("Disconnected from server:", reason);
       setRoomInfo(null);
 
@@ -222,23 +234,39 @@ function App() {
           `Disconnected: ${reason}. Please reconnect manually.`
         );
       }
+      setHasInitialized(false);
       clearTimeout(connectionTimeout);
     });
 
     return () => {
       clearTimeout(connectionTimeout);
-      if (socket.connected) {
-        socket.disconnect();
+      if (newSocket.connected) {
+        newSocket.disconnect();
       }
     };
   };
 
-  // Function to set up all event listeners for the socket
+  // Function to set up essential event listeners for the socket
+  // Keep this minimal to avoid duplicate listeners
   const setupEventListeners = (socket: typeof SocketType) => {
-    // Listen for welcome message
+    // Listen for welcome message - this is the only essential immediate listener
     socket.on("welcome", (data: any) => {
       console.log("Received welcome message:", data);
     });
+  };
+
+  // Initialize socket on first load, only once
+  useEffect(() => {
+    if (!hasInitialized) {
+      initializeConnection();
+    }
+  }, [initializeConnection, hasInitialized]);
+
+  // Set up all socket event listeners when socket is connected
+  useEffect(() => {
+    if (!socket) return;
+
+    console.log("Setting up main socket event listeners");
 
     // Listen for notification messages
     socket.on("notification", (data: any) => {
@@ -327,12 +355,79 @@ function App() {
         }, 3000);
       }
     );
-  };
 
-  // Initialize socket on first load
-  useEffect(() => {
-    initializeConnection();
-  }, [initializeConnection]);
+    // Handle events for multiplayer
+    const handleWelcome = (data: any) => {
+      console.log("Received welcome message:", data);
+    };
+
+    const handleRoomUpdate = (roomData: any) => {
+      console.log("Received room update:", roomData);
+      setRoomInfo(roomData);
+    };
+
+    const handleRoomsUpdate = (rooms: any) => {
+      console.log("Received rooms update:", rooms);
+    };
+
+    const handleRoomJoined = (data: any) => {
+      console.log("Room joined event received:", data);
+      setConnectionError(null);
+    };
+
+    const handleSocketError = (error: any) => {
+      console.error("Socket error:", error);
+      setConnectionError(error.message || "An unknown error occurred");
+    };
+
+    const handleGameState = (gameState: any) => {
+      console.log("Received game state:", gameState);
+      setGameState((prevState) => ({
+        ...prevState,
+        ...gameState,
+        // Make sure the state has the correct status format
+        status:
+          gameState.status === "playing"
+            ? GameStatus.PLAYING
+            : gameState.status === "waiting"
+            ? GameStatus.WAITING
+            : gameState.status === "paused"
+            ? GameStatus.PAUSED
+            : gameState.status === "game_over"
+            ? GameStatus.GAME_OVER
+            : prevState.status,
+      }));
+    };
+
+    const handleGameStarting = (playerCount: number) => {
+      console.log(`Game starting with ${playerCount} players!`);
+    };
+
+    // Listen for various socket events
+    socket.on("welcome", handleWelcome);
+    socket.on("roomUpdate", handleRoomUpdate);
+    socket.on("roomsUpdate", handleRoomsUpdate);
+    socket.on("roomJoined", handleRoomJoined);
+    socket.on("error", handleSocketError);
+    socket.on("gameState", handleGameState);
+    socket.on("gameStarting", handleGameStarting);
+
+    // Clean up all listeners when component unmounts or socket changes
+    return () => {
+      console.log("Cleaning up socket event listeners");
+      socket.off("notification");
+      socket.off("gameStateUpdate");
+      socket.off("roomUpdate");
+      socket.off("receiveGarbage");
+      socket.off("welcome", handleWelcome);
+      socket.off("roomUpdate", handleRoomUpdate);
+      socket.off("roomsUpdate", handleRoomsUpdate);
+      socket.off("roomJoined", handleRoomJoined);
+      socket.off("error", handleSocketError);
+      socket.off("gameState", handleGameState);
+      socket.off("gameStarting", handleGameStarting);
+    };
+  }, [socket, gameState.player.lines, gameState.board]);
 
   // Handle player actions with a callback to avoid recreating it on each render
   const handlePlayerAction = useCallback(
@@ -475,75 +570,6 @@ function App() {
     },
     [socket]
   );
-
-  useEffect(() => {
-    if (!socket) return;
-
-    const handleWelcome = (data: any) => {
-      console.log("Received welcome message:", data);
-    };
-
-    const handleRoomUpdate = (roomData: any) => {
-      console.log("Received room update:", roomData);
-      setRoomInfo(roomData);
-    };
-
-    const handleRoomsUpdate = (rooms: any) => {
-      console.log("Received rooms update:", rooms);
-    };
-
-    const handleRoomJoined = (data: any) => {
-      console.log("Room joined event received:", data);
-      setConnectionError(null);
-    };
-
-    const handleSocketError = (error: any) => {
-      console.error("Socket error:", error);
-      setConnectionError(error.message || "An unknown error occurred");
-    };
-
-    const handleGameState = (gameState: any) => {
-      console.log("Received game state:", gameState);
-      setGameState((prevState) => ({
-        ...prevState,
-        ...gameState,
-        // Make sure the state has the correct status format
-        status:
-          gameState.status === "playing"
-            ? GameStatus.PLAYING
-            : gameState.status === "waiting"
-            ? GameStatus.WAITING
-            : gameState.status === "paused"
-            ? GameStatus.PAUSED
-            : gameState.status === "game_over"
-            ? GameStatus.GAME_OVER
-            : prevState.status,
-      }));
-    };
-
-    const handleGameStarting = (playerCount: number) => {
-      console.log(`Game starting with ${playerCount} players!`);
-    };
-
-    // Listen for various socket events
-    socket.on("welcome", handleWelcome);
-    socket.on("roomUpdate", handleRoomUpdate);
-    socket.on("roomsUpdate", handleRoomsUpdate);
-    socket.on("roomJoined", handleRoomJoined);
-    socket.on("error", handleSocketError);
-    socket.on("gameState", handleGameState);
-    socket.on("gameStarting", handleGameStarting);
-
-    return () => {
-      socket.off("welcome", handleWelcome);
-      socket.off("roomUpdate", handleRoomUpdate);
-      socket.off("roomsUpdate", handleRoomsUpdate);
-      socket.off("roomJoined", handleRoomJoined);
-      socket.off("error", handleSocketError);
-      socket.off("gameState", handleGameState);
-      socket.off("gameStarting", handleGameStarting);
-    };
-  }, [socket]);
 
   // Handle keyboard input for debugging game start
   useEffect(() => {
