@@ -146,15 +146,17 @@ function App() {
     let serverUrl: string;
 
     if (isProduction) {
-      // Use a dedicated server URL that's known to be reliable
-      serverUrl = "https://tetris-server-production.up.railway.app";
+      // Use the server URL from environment variable if available
+      serverUrl =
+        import.meta.env.VITE_SERVER_URL ||
+        "https://tetris-with-friends-server.onrender.com";
 
-      // If we have an environment variable, use that instead
-      if (import.meta.env.VITE_SERVER_URL) {
-        serverUrl = import.meta.env.VITE_SERVER_URL;
-      }
+      // Fallback option if the primary one doesn't work
+      const fallbackUrl = "https://tetris-with-friends-api.onrender.com";
 
-      console.log(`Using production server URL: ${serverUrl}`);
+      console.log(
+        `Using production server URL: ${serverUrl} with fallback: ${fallbackUrl}`
+      );
     } else {
       // Local development
       serverUrl = "http://localhost:3001";
@@ -168,7 +170,7 @@ function App() {
       reconnectionDelayMax: 10000,
       reconnectionAttempts: 10,
       timeout: 20000, // Longer timeout for initial connection
-      transports: ["polling", "websocket"], // Start with polling for better compatibility
+      transports: ["websocket", "polling"], // Try websocket first, fall back to polling
       path: serverUrl.includes("/api/socket") ? "/api/socket" : undefined,
       forceNew: true, // Force a new connection
       autoConnect: true,
@@ -201,6 +203,51 @@ function App() {
 
     newSocket.on("connect_error", (error: Error) => {
       console.error("Connection error:", error);
+
+      // If in production and using the primary URL, try fallback
+      if (isProduction && serverUrl === import.meta.env.VITE_SERVER_URL) {
+        console.log("Primary server connection failed, trying fallback...");
+        // Clean up the current connection attempt
+        clearTimeout(connectionTimeout);
+        newSocket.disconnect();
+
+        // Try the fallback URL
+        const fallbackUrl = "https://tetris-with-friends-api.onrender.com";
+        console.log(`Attempting fallback connection to: ${fallbackUrl}`);
+
+        const fallbackManager = new Manager(fallbackUrl, {
+          reconnectionDelayMax: 10000,
+          reconnectionAttempts: 5,
+          timeout: 15000,
+          transports: ["websocket", "polling"],
+          forceNew: true,
+          autoConnect: true,
+        });
+
+        const fallbackSocket = fallbackManager.socket("/");
+
+        // Set up fallback connection handlers
+        fallbackSocket.on("connect", () => {
+          console.log(
+            "Connected to fallback server with ID:",
+            fallbackSocket.id
+          );
+          setConnecting(false);
+          setConnectionError(null);
+          setSocket(fallbackSocket);
+        });
+
+        fallbackSocket.on("connect_error", (fallbackError: Error) => {
+          console.error("Fallback connection error:", fallbackError);
+          setConnectionError(
+            `Could not connect to game servers. Please try again later.`
+          );
+          setConnecting(false);
+        });
+
+        return;
+      }
+
       setConnectionError(
         `Connection error: ${error.message}. Please try again later.`
       );
