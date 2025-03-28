@@ -15,7 +15,8 @@
     "dev:client": "cd packages/client && npm run dev",
     "start:server": "cd packages/server && npm run start",
     "install:all": "npm install && npm run build:types",
-    "vercel-build": "npm run build:all"
+    "vercel-build": "cd packages/types && npm run build && cd ../client && npm run build",
+    "vercel-install": "npm install && cd packages/types && npm run build"
   },
   "keywords": [],
   "author": "",

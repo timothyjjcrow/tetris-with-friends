@@ -1,6 +1,6 @@
 {
-  "buildCommand": "npm run build:all",
+  "buildCommand": "npm run vercel-build",
   "outputDirectory": "packages/client/dist",
-  "installCommand": "npm run install:all",
+  "installCommand": "npm run vercel-install",
   "framework": "vite"
 }
