@@ -141,30 +141,18 @@ function App() {
     setConnecting(true);
     setConnectionError(null);
 
-    // Determine the appropriate server URL based on environment
-    const isProduction = window.location.hostname !== "localhost";
-    let serverUrl: string;
-    let fallbackUrl: string | null = null;
-
-    if (isProduction) {
-      // Use the server URL from environment variable if available
-      serverUrl =
-        import.meta.env.VITE_SERVER_URL ||
-        "https://tetris-with-friends-server-production.up.railway.app";
-
-      // If we have a fallback URL configured, use it
-      fallbackUrl =
-        import.meta.env.VITE_FALLBACK_SERVER_URL ||
-        "https://tetris-with-friends-api.onrender.com";
-
-      console.log(
-        `Using production server URL: ${serverUrl} with fallback: ${fallbackUrl}`
-      );
-    } else {
-      // Local development
-      serverUrl = "http://localhost:3001";
-      console.log(`Using local server URL: ${serverUrl}`);
+    // If there's an existing socket, disconnect it first
+    if (socket) {
+      console.log("Disconnecting existing socket before reconnecting");
+      socket.disconnect();
     }
+
+    // Determine the appropriate server URL based on environment
+    const serverUrl =
+      import.meta.env.VITE_SERVER_URL ||
+      (window.location.hostname === "localhost"
+        ? "http://localhost:3001"
+        : "https://tetris-server-production.up.railway.app");
 
     console.log(`Connecting to server at: ${serverUrl}`);
 
@@ -172,10 +160,15 @@ function App() {
     const manager = new Manager(serverUrl, {
       reconnectionDelayMax: 10000,
       reconnectionAttempts: 5,
-      timeout: 15000, // Shortened timeout for faster fallback
+      timeout: 20000, // Increased timeout for more reliable connections
       transports: ["websocket", "polling"], // Try websocket first, fall back to polling
       forceNew: true, // Force a new connection
       autoConnect: true,
+      reconnection: true,
+      query: {
+        clientVersion: "1.0.0", // Add client version for debugging
+        clientTime: new Date().toISOString(),
+      },
     });
 
     console.log(
@@ -187,60 +180,13 @@ function App() {
     // Set up a timeout for connection attempts
     const connectionTimeout = setTimeout(() => {
       if (connecting) {
-        console.error("Connection attempt timed out after 15 seconds");
-
-        if (isProduction && fallbackUrl) {
-          // Try fallback if primary times out
-          tryFallbackConnection(fallbackUrl, connectionTimeout);
-        } else {
-          setConnectionError(
-            "Connection timed out. Please check your internet connection and try again."
-          );
-          setConnecting(false);
-        }
-      }
-    }, 15000);
-
-    // Function to try fallback connection
-    const tryFallbackConnection = (
-      fallbackUrl: string,
-      timeoutId: NodeJS.Timeout
-    ) => {
-      console.log("Primary server connection failed, trying fallback...");
-
-      // Clean up the current connection attempt
-      clearTimeout(timeoutId);
-      newSocket.disconnect();
-
-      console.log(`Attempting fallback connection to: ${fallbackUrl}`);
-
-      const fallbackManager = new Manager(fallbackUrl, {
-        reconnectionDelayMax: 10000,
-        reconnectionAttempts: 3,
-        timeout: 10000,
-        transports: ["websocket", "polling"],
-        forceNew: true,
-        autoConnect: true,
-      });
-
-      const fallbackSocket = fallbackManager.socket("/");
-
-      // Set up fallback connection handlers
-      fallbackSocket.on("connect", () => {
-        console.log("Connected to fallback server with ID:", fallbackSocket.id);
-        setConnecting(false);
-        setConnectionError(null);
-        setSocket(fallbackSocket);
-      });
-
-      fallbackSocket.on("connect_error", (fallbackError: Error) => {
-        console.error("Fallback connection error:", fallbackError);
+        console.error("Connection attempt timed out after 20 seconds");
         setConnectionError(
-          `Could not connect to game servers. Please try again later.`
+          "Connection timed out. Please check your internet connection and try again."
         );
         setConnecting(false);
-      });
-    };
+      }
+    }, 20000);
 
     // Connection event handlers
     newSocket.on("connect", () => {
@@ -253,13 +199,6 @@ function App() {
 
     newSocket.on("connect_error", (error: Error) => {
       console.error("Connection error:", error);
-
-      // If in production and we have a fallback URL, try it
-      if (isProduction && fallbackUrl) {
-        tryFallbackConnection(fallbackUrl, connectionTimeout);
-        return;
-      }
-
       setConnectionError(
         `Connection error: ${error.message}. Please try again later.`
       );
@@ -276,7 +215,11 @@ function App() {
     newSocket.on("disconnect", (reason: string) => {
       console.log("Disconnected from server:", reason);
       setRoomInfo(null);
-      setConnectionError(`Disconnected: ${reason}`);
+
+      // Only show error if it wasn't a client-initiated disconnect
+      if (reason !== "io client disconnect") {
+        setConnectionError(`Disconnected: ${reason}. Trying to reconnect...`);
+      }
       clearTimeout(connectionTimeout);
     });
 
@@ -381,7 +324,7 @@ function App() {
       clearTimeout(connectionTimeout);
       newSocket.disconnect();
     };
-  }, []);
+  }, [socket]);
 
   // Initialize socket on first load
   useEffect(() => {
@@ -479,13 +422,21 @@ function App() {
     (roomName: string) => {
       if (!socket || !playerName) return;
 
+      console.log(`Creating room with name: ${roomName}`);
       socket.emit("createRoom", roomName, (roomId: string) => {
         console.log(`Created room: ${roomId}`);
 
+        if (!roomId) {
+          setConnectionError("Failed to create room. Please try again.");
+          return;
+        }
+
         // Join the room
         socket.emit("joinRoom", { roomId, playerName }, (success: boolean) => {
+          console.log(`Join room result: ${success ? "success" : "failed"}`);
           if (success) {
             console.log(`Joined room: ${roomId} as ${playerName}`);
+            setConnectionError(null);
             setGameMode("multiplayer");
           } else {
             setConnectionError("Failed to join room. Please try again.");
@@ -501,15 +452,19 @@ function App() {
       if (!socket) return;
 
       setPlayerName(name);
+      console.log(`Joining room: ${roomId} as ${name}`);
 
       socket.emit(
         "joinRoom",
         { roomId, playerName: name },
         (success: boolean) => {
+          console.log(`Join room result: ${success ? "success" : "failed"}`);
           if (success) {
-            console.log(`Joined room: ${roomId} as ${name}`);
+            console.log(`Successfully joined room: ${roomId}`);
+            setConnectionError(null);
             setGameMode("multiplayer");
           } else {
+            console.error("Failed to join room");
             setConnectionError("Failed to join room. Please try again.");
           }
         }
@@ -525,8 +480,23 @@ function App() {
       console.log("Received welcome message:", data);
     };
 
-    const handleRoomUpdate = (rooms: any) => {
+    const handleRoomUpdate = (roomData: any) => {
+      console.log("Received room update:", roomData);
+      setRoomInfo(roomData);
+    };
+
+    const handleRoomsUpdate = (rooms: any) => {
       console.log("Received rooms update:", rooms);
+    };
+
+    const handleRoomJoined = (data: any) => {
+      console.log("Room joined event received:", data);
+      setConnectionError(null);
+    };
+
+    const handleSocketError = (error: any) => {
+      console.error("Socket error:", error);
+      setConnectionError(error.message || "An unknown error occurred");
     };
 
     const handleGameState = (gameState: any) => {
@@ -554,13 +524,19 @@ function App() {
 
     // Listen for various socket events
     socket.on("welcome", handleWelcome);
-    socket.on("roomsUpdate", handleRoomUpdate);
+    socket.on("roomUpdate", handleRoomUpdate);
+    socket.on("roomsUpdate", handleRoomsUpdate);
+    socket.on("roomJoined", handleRoomJoined);
+    socket.on("error", handleSocketError);
     socket.on("gameState", handleGameState);
     socket.on("gameStarting", handleGameStarting);
 
     return () => {
       socket.off("welcome", handleWelcome);
-      socket.off("roomsUpdate", handleRoomUpdate);
+      socket.off("roomUpdate", handleRoomUpdate);
+      socket.off("roomsUpdate", handleRoomsUpdate);
+      socket.off("roomJoined", handleRoomJoined);
+      socket.off("error", handleSocketError);
       socket.off("gameState", handleGameState);
       socket.off("gameStarting", handleGameStarting);
     };
@@ -827,17 +803,19 @@ function App() {
                               playerName ||
                               `Player ${socket.id?.substring(0, 5)}`,
                           },
-                          (success: boolean) => {
+                          (success: boolean, error?: string) => {
                             console.log(
                               `Single player start result: ${
                                 success ? "success" : "failed"
-                              }`
+                              }${error ? `, error: ${error}` : ""}`
                             );
                             if (success) {
                               setGameMode("singleplayer");
+                              setConnectionError(null);
                             } else {
                               setConnectionError(
-                                "Failed to start game. Please try again."
+                                error ||
+                                  "Failed to start game. Please try again."
                               );
                             }
                           }

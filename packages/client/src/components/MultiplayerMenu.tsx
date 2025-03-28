@@ -83,21 +83,20 @@ const MultiplayerMenu: React.FC<MultiplayerMenuProps> = ({
       // The server expects roomName directly, not an object
       socket.emit("createRoom", roomName, (roomId: string) => {
         console.log(`Room created with ID: ${roomId}`);
-        if (roomId) {
-          // Now join the created room
-          socket.emit(
-            "joinRoom",
-            { roomId, playerName },
-            (success: boolean) => {
-              console.log(
-                `Join room result: ${success ? "success" : "failed"}`
-              );
-              if (success) {
-                onCreateRoom(roomName);
-              }
-            }
-          );
+        if (!roomId) {
+          console.error("Failed to create room - no roomId returned");
+          return;
         }
+
+        // Now join the created room
+        socket.emit("joinRoom", { roomId, playerName }, (success: boolean) => {
+          console.log(`Join room result: ${success ? "success" : "failed"}`);
+          if (success) {
+            onCreateRoom(roomName);
+          } else {
+            console.error("Failed to join the created room");
+          }
+        });
       });
     }
   };
@@ -107,12 +106,18 @@ const MultiplayerMenu: React.FC<MultiplayerMenuProps> = ({
 
     console.log(`Joining room with ID: ${roomId}`);
     if (socket) {
-      socket.emit("joinRoom", { roomId, playerName }, (success: boolean) => {
-        console.log(`Join room result: ${success ? "success" : "failed"}`);
-        if (success) {
-          onJoinRoom(roomId, playerName);
-        }
-      });
+      try {
+        socket.emit("joinRoom", { roomId, playerName }, (success: boolean) => {
+          console.log(`Join room result: ${success ? "success" : "failed"}`);
+          if (success) {
+            onJoinRoom(roomId, playerName);
+          } else {
+            console.error("Failed to join room with ID:", roomId);
+          }
+        });
+      } catch (error) {
+        console.error("Error joining room:", error);
+      }
     }
   };
 
