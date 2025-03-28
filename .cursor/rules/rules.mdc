@@ -1,0 +1,64 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# Cursor Agent Coding Rules
+
+## Core Principles
+
+* **Prioritize Readability:** Generate code that is clear, explicit, and easy for humans to understand. Avoid overly clever, complex, or obscure constructs.
+* **Maintain Consistency:** Strictly adhere to the project's established conventions, coding style (linters, formatters), naming patterns, and architectural choices. If conventions are unclear, ask or follow common practices for the language/framework.
+* **Embrace Modularity (SRP):** Design small, focused functions, classes, and modules. Each unit should have a single, well-defined responsibility (Single Responsibility Principle).
+* **Be Explicit:** Avoid hidden "magic". Make dependencies, configurations, and data flow obvious.
+* **Focus on Maintainability:** Write code assuming it will be read, debugged, and modified by others (or your future self) long after the initial generation context is lost.
+
+## Technology and Tooling
+
+* **Use Standard Tech:** Prefer widely adopted, well-documented languages, frameworks, and libraries with strong community support (e.g., Python, TS/JS, Java, Go; React, Django, Spring, Node.js).
+* **Leverage Static Typing:** Use static types (TypeScript, typed Python, Java, C#, Go) whenever available in the project. Generate accurate and useful type annotations.
+* **Adhere to Linters/Formatters:** Generated code **must** pass checks from configured linters (e.g., `ESLint`, `Ruff`, `Pylint`, `Checkstyle`) and formatters (e.g., `Prettier`, `Black`, `gofmt`). Apply formatting automatically if configured.
+* **Follow Project Structure:** Use standard directory layouts and organizational patterns appropriate for the language/framework (e.g., `src`, `tests`, `pkg`, `cmd`).
+
+## Code Structure and Organization
+
+* **File Size Guideline:** Keep files focused on a specific purpose or module. Target **under 400 lines** of code (excluding comments, imports, blank lines). If a file grows significantly larger, suggest or implement splitting it into more cohesive modules. *Focus on logical cohesion over strict line counts.*
+* **Function/Method Size Guideline:** Keep functions/methods small and focused on a single task. Target **under 60 lines** of code (excluding docstrings/comments). A function should ideally fit on one screen.
+* **Refactor Large/Complex Units:** Proactively break down functions/methods that exceed the size guideline or contain complex logic into smaller, well-named helper functions.
+* **Nesting Limit:** Avoid deep nesting of conditional logic (`if`/`else`) or loops. Generally aim for **no more than 2-3 levels** deep. Refactor complex conditions or nested logic into separate functions or variables.
+* **Module Organization:** Group related functions, classes, and constants logically. Avoid overly generic `utils` or `helpers` files; prefer specific modules (e.g., `apiClient.js`, `stringFormatting.py`, `validationRules.ts`).
+* **Import Order:** Organize imports consistently according to project or language conventions (e.g., standard library -> third-party -> local application modules). Avoid wildcard imports (`*`).
+
+## Coding Style and Conventions
+
+* **Naming Conventions:**
+    * Use clear, descriptive, and unambiguous names for variables, functions, classes, constants, etc.
+    * Follow language-specific naming standards (`camelCase` for JS/Java vars/funcs, `PascalCase` for classes, `snake_case` for Python vars/funcs, `UPPER_SNAKE_CASE` for constants).
+    * Avoid single-letter variable names (except for simple loop counters like `i`, `j`) and cryptic abbreviations.
+* **Formatting:** Strictly follow the project's auto-formatter rules (`Prettier`, `Black`, `gofmt`, etc.). Ensure consistent indentation, spacing, line breaks, and brace style.
+* **Comments:**
+    * Explain the **why** (intent, rationale for complex decisions, workarounds), not the **what** (which should be clear from well-written code).
+    * Remove commented-out code before finalizing changes.
+    * Avoid obvious or redundant comments (e.g., `// increment i`).
+* **Documentation (Docstrings):**
+    * Generate comprehensive docstrings for all public/exported functions, classes, methods, and modules.
+    * Use standard documentation formats for the language (JSDoc, Python Docstrings [reST/Google Style], JavaDoc, GoDoc).
+    * Clearly describe the unit's purpose, parameters (`@param`, `:param:`), return values (`@returns`, `:returns:`), and any potential errors/exceptions (`@throws`, `:raises:`).
+* **Constants:** Define magic strings and numbers (literal values used directly in code without explanation) as named constants at the appropriate scope (e.g., `const MAX_RETRIES = 3;`).
+* **Configuration:** Externalize configuration values (database URLs, API keys, feature flags, thresholds) using environment variables, configuration files (`.env`, `config.yaml`), or a dedicated configuration service. **Do not hardcode configuration in source code.**
+
+## Maintainability and Quality
+
+* **Error Handling:** Implement robust and explicit error handling. Use exceptions or specific error return values consistently, as appropriate for the language. Provide informative error messages useful for debugging. Do not ignore or swallow errors silently (e.g., empty `catch` blocks).
+* **Testing:**
+    * When generating functions or classes with non-trivial logic, proactively suggest or generate corresponding unit tests using the project's standard testing framework (e.g., `Jest`, `Pytest`, `JUnit`, Go `testing`).
+    * Tests should be clear, focused, independent, and cover primary success paths, edge cases, and expected error conditions.
+* **Immutability:** Prefer immutable data structures and practices where practical. Avoid modifying input parameters directly unless the function's explicit purpose is to do so (and it is clearly documented).
+* **DRY (Don't Repeat Yourself):** Identify and abstract repeated code patterns or logic into reusable functions, classes, or components.
+* **Simplicity (KISS - Keep It Simple, Stupid):** Avoid unnecessary complexity. Choose the simplest, most straightforward solution that correctly meets the requirements. Avoid premature optimization.
+
+## Security Considerations (Basic)
+
+* **Input Validation:** Always validate and sanitize input received from external sources (user input, API calls, file reads) to prevent security vulnerabilities like injection attacks (SQLi, XSS), path traversal, etc.
+* **Secrets Management:** **Never** hardcode secrets (API keys, passwords, tokens, private certificates) directly in the source code. Use environment variables, a secrets management system (like HashiCorp Vault, AWS Secrets Manager), or secure configuration files (with appropriate access controls).
+* **Principle of Least Privilege:** Ensure code operates with the minimum permissions necessary to perform its function.
