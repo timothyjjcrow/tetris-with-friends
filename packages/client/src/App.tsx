@@ -372,6 +372,11 @@ function App() {
 
     const handleRoomJoined = (data: any) => {
       console.log("Room joined event received:", data);
+      // Explicitly set room info when room is joined
+      if (data && data.room) {
+        console.log("Setting room info from joined event:", data.room);
+        setRoomInfo(data.room);
+      }
       setConnectionError(null);
     };
 
@@ -428,6 +433,11 @@ function App() {
       socket.off("gameStarting", handleGameStarting);
     };
   }, [socket, gameState.player.lines, gameState.board]);
+
+  // Add a debug effect to track roomInfo changes
+  useEffect(() => {
+    console.log("roomInfo changed:", roomInfo);
+  }, [roomInfo]);
 
   // Handle player actions with a callback to avoid recreating it on each render
   const handlePlayerAction = useCallback(
@@ -530,16 +540,25 @@ function App() {
         }
 
         // Join the room
-        socket.emit("joinRoom", { roomId, playerName }, (success: boolean) => {
-          console.log(`Join room result: ${success ? "success" : "failed"}`);
-          if (success) {
-            console.log(`Joined room: ${roomId} as ${playerName}`);
-            setConnectionError(null);
-            setGameMode("multiplayer");
-          } else {
-            setConnectionError("Failed to join room. Please try again.");
+        socket.emit(
+          "joinRoom",
+          { roomId, playerName },
+          (success: boolean, roomData?: RoomData) => {
+            console.log(`Join room result: ${success ? "success" : "failed"}`);
+            if (success) {
+              console.log(`Joined room: ${roomId} as ${playerName}`);
+              // If server returned room data, use it
+              if (roomData) {
+                console.log("Setting room info from join callback:", roomData);
+                setRoomInfo(roomData);
+              }
+              setConnectionError(null);
+              setGameMode("multiplayer");
+            } else {
+              setConnectionError("Failed to join room. Please try again.");
+            }
           }
-        });
+        );
       });
     },
     [socket, playerName]
@@ -555,10 +574,15 @@ function App() {
       socket.emit(
         "joinRoom",
         { roomId, playerName: name },
-        (success: boolean) => {
+        (success: boolean, roomData?: RoomData) => {
           console.log(`Join room result: ${success ? "success" : "failed"}`);
           if (success) {
             console.log(`Successfully joined room: ${roomId}`);
+            // If server returned room data, use it
+            if (roomData) {
+              console.log("Setting room info from join callback:", roomData);
+              setRoomInfo(roomData);
+            }
             setConnectionError(null);
             setGameMode("multiplayer");
           } else {
@@ -764,7 +788,99 @@ function App() {
           </div>
         )}
 
-        {/* Game start screen - shown when not playing but connected */}
+        {/* Show waiting room UI when in a room but game hasn't started */}
+        {socket?.connected &&
+          roomInfo &&
+          (gameState.status === GameStatus.WAITING ||
+            gameState.status === GameStatus.GAME_OVER) && (
+            <div className="bg-slate-800/80 p-8 rounded-lg shadow-xl border border-slate-700 max-w-2xl mx-auto">
+              <h2 className="text-2xl font-bold mb-4 text-center text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-300">
+                Waiting Room: {roomInfo.name}
+              </h2>
+
+              <div className="mb-6">
+                <h3 className="text-lg font-medium mb-2 text-slate-300">
+                  Players in Room:
+                </h3>
+                <ul className="bg-slate-900/50 rounded-md p-4 divide-y divide-slate-700/50">
+                  {roomInfo.players.map((player, index) => (
+                    <li key={player.id} className="py-2 flex items-center">
+                      <span className="w-2 h-2 bg-green-400 rounded-full mr-2"></span>
+                      <span className="font-medium">
+                        {player.name || `Player ${index + 1}`}
+                        {player.id === socket.id ? " (You)" : ""}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              <div className="text-center">
+                <p className="text-slate-300 mb-4">
+                  {roomInfo.players.length === 1
+                    ? "Waiting for other players to join..."
+                    : "Ready to start the game?"}
+                </p>
+
+                <div className="flex gap-4 justify-center">
+                  <button
+                    onClick={() => {
+                      // Start the game
+                      console.log(
+                        `Attempting to start game in room ${roomInfo.id}`
+                      );
+                      if (socket) {
+                        socket.emit(
+                          "startGame",
+                          roomInfo.id,
+                          (success: boolean) => {
+                            console.log(
+                              `Game start result: ${
+                                success ? "success" : "failed"
+                              }`
+                            );
+                            if (!success) {
+                              setConnectionError(
+                                "Failed to start game. Make sure there are at least 2 players."
+                              );
+                            }
+                          }
+                        );
+                      }
+                    }}
+                    disabled={roomInfo.players.length < 1}
+                    className={`px-6 py-3 bg-purple-600 hover:bg-purple-700 rounded-md text-white font-medium transition-colors ${
+                      roomInfo.players.length < 1
+                        ? "opacity-50 cursor-not-allowed"
+                        : ""
+                    }`}
+                  >
+                    Start Game
+                  </button>
+                  <button
+                    onClick={() => {
+                      // Leave the room
+                      if (socket) {
+                        socket.emit("leaveRoom", roomInfo.id, () => {
+                          setRoomInfo(null);
+                          setGameMode("menu");
+                        });
+                      }
+                    }}
+                    className="px-6 py-3 bg-slate-700 hover:bg-slate-600 rounded-md text-white font-medium transition-colors"
+                  >
+                    Leave Room
+                  </button>
+                </div>
+
+                <p className="text-xs text-slate-400 mt-4">
+                  Press 'G' key to force start the game (debug)
+                </p>
+              </div>
+            </div>
+          )}
+
+        {/* Game start screen - shown when not playing but connected and not in a room */}
         {socket?.connected &&
           (gameState.status === GameStatus.WAITING ||
             gameState.status === GameStatus.GAME_OVER) &&
