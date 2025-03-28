@@ -105,10 +105,7 @@ function App() {
   // Track cleared lines for animation
   const [clearedLines, setClearedLines] = useState<number[]>([]);
 
-  // Add offline mode flag
-  const [offlineMode, setOfflineMode] = useState<boolean>(false);
-
-  // Game state from server or local state for offline mode
+  // Game state from server
   const [gameState, setGameState] = useState<ExtendedGameState>({
     status: GameStatus.WAITING, // Start with WAITING instead of PLAYING
     board: createEmptyBoard() as unknown as number[][], // Cast to number[][] to satisfy TypeScript
@@ -141,8 +138,6 @@ function App() {
 
   // Initialize Socket.IO connection
   const initializeConnection = useCallback(() => {
-    // Reset offline mode when trying to connect
-    setOfflineMode(false);
     setConnecting(true);
     setConnectionError(null);
 
@@ -151,35 +146,32 @@ function App() {
     let serverUrl: string;
 
     if (isProduction) {
-      // Try multiple possible server URLs, in order of preference
-      const possibleServerUrls = [
-        import.meta.env.VITE_PRIMARY_SERVER_URL, // Primary server from env
-        import.meta.env.VITE_FALLBACK_SERVER_URL, // Fallback server from env
-        import.meta.env.VITE_SERVER_URL, // Legacy env variable
-        "https://tetris-with-friends-server.onrender.com", // Main server hardcoded
-        "https://tetris-with-friends-api.onrender.com", // Possible alternate URL
-        window.location.origin, // Fallback to same origin (for Vercel API route)
-      ];
+      // Use a dedicated server URL that's known to be reliable
+      serverUrl = "https://tetris-server-production.up.railway.app";
 
-      // Find the first non-empty URL
-      serverUrl =
-        possibleServerUrls.find((url) => url) || window.location.origin;
-      console.log(`Using server URL: ${serverUrl}`);
+      // If we have an environment variable, use that instead
+      if (import.meta.env.VITE_SERVER_URL) {
+        serverUrl = import.meta.env.VITE_SERVER_URL;
+      }
+
+      console.log(`Using production server URL: ${serverUrl}`);
     } else {
       // Local development
       serverUrl = "http://localhost:3001";
       console.log(`Using local server URL: ${serverUrl}`);
     }
 
-    console.log(`Attempting to connect to server at: ${serverUrl}`);
+    console.log(`Connecting to server at: ${serverUrl}`);
 
-    // Connect to the Socket.IO server with better error handling
+    // Connect to the Socket.IO server with robust configuration
     const manager = new Manager(serverUrl, {
       reconnectionDelayMax: 10000,
       reconnectionAttempts: 10,
-      timeout: 10000,
-      transports: ["websocket", "polling"],
+      timeout: 20000, // Longer timeout for initial connection
+      transports: ["polling", "websocket"], // Start with polling for better compatibility
       path: serverUrl.includes("/api/socket") ? "/api/socket" : undefined,
+      forceNew: true, // Force a new connection
+      autoConnect: true,
     });
 
     console.log(
@@ -191,13 +183,13 @@ function App() {
     // Set up a timeout for connection attempts
     const connectionTimeout = setTimeout(() => {
       if (connecting) {
-        console.error("Connection attempt timed out after 10 seconds");
+        console.error("Connection attempt timed out after 20 seconds");
         setConnectionError(
-          "Connection timed out. The game server might be unavailable right now. Please try again later."
+          "Connection timed out. Please check your internet connection and try again."
         );
         setConnecting(false);
       }
-    }, 10000);
+    }, 20000);
 
     // Connection event handlers
     newSocket.on("connect", () => {
@@ -210,7 +202,7 @@ function App() {
     newSocket.on("connect_error", (error: Error) => {
       console.error("Connection error:", error);
       setConnectionError(
-        `Connection error: ${error.message}. The game server might be offline or unreachable.`
+        `Connection error: ${error.message}. Please try again later.`
       );
       setConnecting(false);
       clearTimeout(connectionTimeout);
@@ -332,66 +324,7 @@ function App() {
     };
   }, []);
 
-  // Function to start offline mode (single player without server)
-  const startOfflineMode = useCallback(() => {
-    setOfflineMode(true);
-    setConnecting(false);
-    setConnectionError(null);
-
-    console.log("Starting offline mode");
-
-    // Initialize game state locally
-    const emptBoard = createEmptyBoard() as unknown as number[][];
-    const initialPiece = getRandomPiece();
-    const nextPiece = getRandomPiece();
-
-    setGameState({
-      status: GameStatus.PLAYING,
-      board: emptBoard,
-      currentPiece: initialPiece,
-      nextPiece: nextPiece,
-      heldPiece: null,
-      canHold: true,
-      pieceQueue: [getRandomPiece(), getRandomPiece(), getRandomPiece()],
-      players: [],
-      player: {
-        id: "offline-player",
-        name: playerName || "Player",
-        score: 0,
-        level: 1,
-        lines: 0,
-      },
-      opponents: [],
-      lastDropTime: Date.now(),
-      dropInterval: 800,
-    });
-
-    setGameMode("offline");
-  }, [playerName]);
-
-  // Function to handle player actions in offline mode
-  const handleOfflineAction = useCallback((action: PlayerAction) => {
-    // Implementation of offline action handling would go here
-    // This would need to replicate server-side game logic for piece movement, collision detection, etc.
-    console.log(`Offline action: ${action}`);
-
-    // This is a simplified version - a full implementation would be more complex
-    if (action === PlayerAction.DROP) {
-      // Example logic - advance to next piece when dropping
-      setGameState((prev) => {
-        // In a real implementation, this would handle board updates, scoring, etc.
-        const nextPiece = getRandomPiece();
-        return {
-          ...prev,
-          currentPiece: prev.nextPiece,
-          nextPiece: nextPiece,
-          pieceQueue: [...prev.pieceQueue.slice(1), getRandomPiece()],
-        };
-      });
-    }
-  }, []);
-
-  // Function to generate a random Tetris piece for offline mode
+  // Function to generate a random Tetris piece (keep this for utility)
   function getRandomPiece(): Piece {
     const types: TetrominoType[] = ["I", "O", "T", "S", "Z", "J", "L"];
     const type = types[Math.floor(Math.random() * types.length)];
@@ -442,16 +375,13 @@ function App() {
   // Handle player actions with a callback to avoid recreating it on each render
   const handlePlayerAction = useCallback(
     (action: PlayerAction) => {
-      if (offlineMode) {
-        // Use offline action handler
-        handleOfflineAction(action);
-      } else if (socket) {
+      if (socket) {
         // Emit the action to the server
         socket.emit("playerAction", { type: action });
         console.log(`Emitted ${action} action to server`);
       }
     },
-    [socket, offlineMode, handleOfflineAction]
+    [socket]
   );
 
   // Handle keyboard input
@@ -636,7 +566,7 @@ function App() {
 
       <main className="max-w-6xl mx-auto mt-4">
         {/* Show fallback content when disconnected */}
-        {!socket?.connected && !connecting && !offlineMode && (
+        {!socket?.connected && !connecting && (
           <div className="text-center py-10 px-4">
             <div className="w-20 h-20 mx-auto mb-4 text-gray-400">
               <svg
@@ -660,56 +590,19 @@ function App() {
               </svg>
             </div>
             <h2 className="text-2xl font-bold text-gray-300 mb-2">
-              Server Connection Failed
+              Server Connection Error
             </h2>
-            <p className="text-gray-400 max-w-md mx-auto mb-4">
+            <p className="text-gray-400 max-w-md mx-auto mb-6">
               We're having trouble connecting to the game server. This usually
-              happens when the server is down or undergoing maintenance.
+              happens when the server is down or your internet connection is
+              unstable.
             </p>
-            <div className="space-y-3">
-              <button
-                onClick={initializeConnection}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-md text-white font-medium transition-colors"
-              >
-                Retry Connection
-              </button>
-
-              <div className="flex items-center justify-center text-gray-400 text-sm">
-                <div className="h-px bg-gray-700 w-12 mr-3"></div>
-                <span>or</span>
-                <div className="h-px bg-gray-700 w-12 ml-3"></div>
-              </div>
-
-              <div>
-                <button
-                  onClick={() => {
-                    const name = prompt(
-                      "Enter your name for offline mode:",
-                      "Player"
-                    );
-                    if (name) {
-                      setPlayerName(name);
-                      startOfflineMode();
-                    }
-                  }}
-                  className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-md text-white font-medium transition-colors"
-                >
-                  Play Offline Mode
-                </button>
-                <p className="mt-2 text-xs text-gray-500">
-                  Limited functionality in offline mode
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Show offline mode banner when playing offline */}
-        {offlineMode && (
-          <div className="mb-4 p-2 bg-yellow-500/10 border border-yellow-500/20 rounded-md text-yellow-300 text-sm text-center">
-            <p>
-              Playing in offline mode. Multiplayer features are not available.
-            </p>
+            <button
+              onClick={initializeConnection}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-md text-white font-medium transition-colors"
+            >
+              Retry Connection
+            </button>
           </div>
         )}
 
@@ -725,9 +618,8 @@ function App() {
           </div>
         )}
 
-        {/* Game board - show in both normal and offline mode */}
-        {((socket?.connected && gameState.status === GameStatus.PLAYING) ||
-          (offlineMode && gameState.status === GameStatus.PLAYING)) && (
+        {/* Game board - show when playing and connected */}
+        {socket?.connected && gameState.status === GameStatus.PLAYING && (
           <div
             className={`flex ${
               hasOpponents ? "justify-between" : "justify-center"
@@ -767,8 +659,8 @@ function App() {
               />
             </div>
 
-            {/* Opponents' boards (only in connected multiplayer mode) */}
-            {hasOpponents && !offlineMode && (
+            {/* Opponents' boards */}
+            {hasOpponents && (
               <div className="flex flex-wrap gap-4 justify-center">
                 {gameState.opponents?.map((opponent) => (
                   <OpponentBoard key={opponent.id} opponent={opponent} />
@@ -782,8 +674,7 @@ function App() {
         {socket?.connected &&
           (gameState.status === GameStatus.WAITING ||
             gameState.status === GameStatus.GAME_OVER) &&
-          !roomInfo &&
-          !offlineMode && (
+          !roomInfo && (
             <div className="flex flex-col items-center justify-center h-[70vh]">
               <div className="text-4xl font-bold mb-8 text-center text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-300">
                 Welcome to Tetris Multiplayer
