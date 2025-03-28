@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
-import { Manager, Socket } from "socket.io-client";
+import { Manager, Socket as SocketType } from "socket.io-client";
+import io from "socket.io-client";
 import GameBoard from "./components/GameBoard";
 import { PiecePreview } from "./components/PiecePreview";
 import ScoreDisplay from "./components/ScoreDisplay";
@@ -90,7 +91,7 @@ const PIECE_COLORS: Record<TetrominoType, string> = {
 
 function App() {
   // Socket connection
-  const [socket, setSocket] = useState<typeof Socket | null>(null);
+  const [socket, setSocket] = useState<typeof SocketType | null>(null);
 
   // Room information
   const [roomInfo, setRoomInfo] = useState<RoomData | null>(null);
@@ -156,49 +157,48 @@ function App() {
 
     console.log(`Connecting to server at: ${serverUrl}`);
 
-    // Connect to the Socket.IO server with robust configuration
-    const manager = new Manager(serverUrl, {
-      reconnectionDelayMax: 10000,
-      reconnectionAttempts: 5,
-      timeout: 20000, // Increased timeout for more reliable connections
-      transports: ["websocket", "polling"], // Try websocket first, fall back to polling
-      forceNew: true, // Force a new connection
-      autoConnect: true,
-      reconnection: true,
-      query: {
-        clientVersion: "1.0.0", // Add client version for debugging
-        clientTime: new Date().toISOString(),
-      },
+    // Try to establish a simple connection first
+    trySimpleConnection(serverUrl);
+  }, [socket]);
+
+  // Function to try a simple socket.io connection
+  const trySimpleConnection = (serverUrl: string) => {
+    console.log("Attempting simple direct connection...");
+
+    // Simple connection with minimal options
+    const socket = io(serverUrl, {
+      transports: ["websocket", "polling"],
+      reconnection: false,
+      timeout: 8000,
     });
-
-    console.log(
-      `Socket.IO Manager created with path: ${manager.opts.path || "/"}`
-    );
-
-    const newSocket = manager.socket("/");
 
     // Set up a timeout for connection attempts
     const connectionTimeout = setTimeout(() => {
       if (connecting) {
-        console.error("Connection attempt timed out after 20 seconds");
+        console.error("Connection attempt timed out");
+        socket.disconnect();
         setConnectionError(
           "Connection timed out. Please check your internet connection and try again."
         );
         setConnecting(false);
       }
-    }, 20000);
+    }, 8000);
 
     // Connection event handlers
-    newSocket.on("connect", () => {
-      console.log("Connected to server with ID:", newSocket.id);
+    socket.on("connect", () => {
+      console.log("Connected to server with ID:", socket.id);
       clearTimeout(connectionTimeout);
       setConnecting(false);
       setConnectionError(null);
-      setSocket(newSocket);
+      setSocket(socket);
+
+      // Add additional event listeners after successful connection
+      setupEventListeners(socket);
     });
 
-    newSocket.on("connect_error", (error: Error) => {
+    socket.on("connect_error", (error: Error) => {
       console.error("Connection error:", error);
+      socket.disconnect();
       setConnectionError(
         `Connection error: ${error.message}. Please try again later.`
       );
@@ -206,35 +206,47 @@ function App() {
       clearTimeout(connectionTimeout);
     });
 
-    newSocket.on("error", (error: Error) => {
+    socket.on("error", (error: Error) => {
       console.error("Socket error:", error);
       setConnectionError(`Socket error: ${error.message}`);
       clearTimeout(connectionTimeout);
     });
 
-    newSocket.on("disconnect", (reason: string) => {
+    socket.on("disconnect", (reason: string) => {
       console.log("Disconnected from server:", reason);
       setRoomInfo(null);
 
       // Only show error if it wasn't a client-initiated disconnect
-      if (reason !== "io client disconnect") {
-        setConnectionError(`Disconnected: ${reason}. Trying to reconnect...`);
+      if (reason !== "io client disconnect" && reason !== "transport close") {
+        setConnectionError(
+          `Disconnected: ${reason}. Please reconnect manually.`
+        );
       }
       clearTimeout(connectionTimeout);
     });
 
+    return () => {
+      clearTimeout(connectionTimeout);
+      if (socket.connected) {
+        socket.disconnect();
+      }
+    };
+  };
+
+  // Function to set up all event listeners for the socket
+  const setupEventListeners = (socket: typeof SocketType) => {
     // Listen for welcome message
-    newSocket.on("welcome", (data: any) => {
+    socket.on("welcome", (data: any) => {
       console.log("Received welcome message:", data);
     });
 
     // Listen for notification messages
-    newSocket.on("notification", (data: any) => {
+    socket.on("notification", (data: any) => {
       console.log("Received notification:", data);
     });
 
     // Listen for game state updates
-    newSocket.on("gameStateUpdate", (newGameState: ExtendedGameState) => {
+    socket.on("gameStateUpdate", (newGameState: ExtendedGameState) => {
       console.log("Received game state update", newGameState.status);
 
       // Log the board for debugging
@@ -286,12 +298,12 @@ function App() {
     });
 
     // Listen for room updates
-    newSocket.on("roomUpdate", (roomData: RoomData) => {
+    socket.on("roomUpdate", (roomData: RoomData) => {
       setRoomInfo(roomData);
     });
 
     // Listen for garbage line notifications
-    newSocket.on(
+    socket.on(
       "receiveGarbage",
       ({
         lineCount,
@@ -315,16 +327,7 @@ function App() {
         }, 3000);
       }
     );
-
-    // Store the socket instance
-    setSocket(newSocket);
-
-    // Clean up the socket connection and timeout when component unmounts
-    return () => {
-      clearTimeout(connectionTimeout);
-      newSocket.disconnect();
-    };
-  }, [socket]);
+  };
 
   // Initialize socket on first load
   useEffect(() => {

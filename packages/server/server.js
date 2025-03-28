@@ -14,6 +14,29 @@ const io = new Server(server, {
     methods: ["GET", "POST"],
     credentials: true,
   },
+  connectTimeout: 10000,
+  pingTimeout: 5000,
+  pingInterval: 10000,
+  transports: ["websocket", "polling"],
+  allowEIO3: true, // Allow compatibility with older clients
+});
+
+// Configure middleware to log socket.io events
+io.use((socket, next) => {
+  console.log(
+    `[${new Date().toISOString()}] Socket ${socket.id} connecting...`
+  );
+
+  // Log connection parameters
+  console.log(`Connection params: ${JSON.stringify(socket.handshake.query)}`);
+
+  // Add metadata to socket
+  socket.metadata = {
+    connectTime: new Date(),
+    address: socket.handshake.address,
+  };
+
+  next();
 });
 
 // Store active rooms
@@ -606,7 +629,7 @@ function startBotGameLogic(roomId, botId, difficulty = "medium") {
   botIntervals[botId] = botIntervalId;
 }
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3001;
 server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
