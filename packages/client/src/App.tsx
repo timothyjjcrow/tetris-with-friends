@@ -107,7 +107,10 @@ function App() {
   // Track cleared lines for animation
   const [clearedLines, setClearedLines] = useState<number[]>([]);
 
-  // Game state from server
+  // Add offline mode flag
+  const [offlineMode, setOfflineMode] = useState<boolean>(false);
+
+  // Game state from server or local state for offline mode
   const [gameState, setGameState] = useState<ExtendedGameState>({
     status: GameStatus.WAITING, // Start with WAITING instead of PLAYING
     board: createEmptyBoard() as unknown as number[][], // Cast to number[][] to satisfy TypeScript
@@ -134,12 +137,14 @@ function App() {
 
   // Add a state to track the current view/mode
   const [gameMode, setGameMode] = useState<
-    "menu" | "singleplayer" | "multiplayer"
+    "menu" | "singleplayer" | "multiplayer" | "offline"
   >("menu");
   const [playerName, setPlayerName] = useState<string>("");
 
   // Initialize Socket.IO connection
   const initializeConnection = useCallback(() => {
+    // Reset offline mode when trying to connect
+    setOfflineMode(false);
     setConnecting(true);
     setConnectionError(null);
 
@@ -148,28 +153,33 @@ function App() {
     let serverUrl: string;
 
     if (isProduction) {
-      // Use environment variable if available
-      const envServerUrl = import.meta.env.VITE_SERVER_URL;
-      if (envServerUrl) {
-        serverUrl = envServerUrl;
-        console.log(`Using server URL from environment: ${serverUrl}`);
-      } else {
-        // Fallback to a deployed server
-        serverUrl = "https://tetris-with-friends-server.onrender.com";
-        console.log(`Using fallback server URL: ${serverUrl}`);
-      }
+      // Try multiple possible server URLs, in order of preference
+      const possibleServerUrls = [
+        import.meta.env.VITE_PRIMARY_SERVER_URL, // Primary server from env
+        import.meta.env.VITE_FALLBACK_SERVER_URL, // Fallback server from env
+        import.meta.env.VITE_SERVER_URL, // Legacy env variable
+        "https://tetris-with-friends-server.onrender.com", // Main server hardcoded
+        "https://tetris-with-friends-api.onrender.com", // Possible alternate URL
+        window.location.origin, // Fallback to same origin (for Vercel API route)
+      ];
+
+      // Find the first non-empty URL
+      serverUrl =
+        possibleServerUrls.find((url) => url) || window.location.origin;
+      console.log(`Using server URL: ${serverUrl}`);
     } else {
       // Local development
       serverUrl = "http://localhost:3001";
       console.log(`Using local server URL: ${serverUrl}`);
     }
 
-    console.log(`Connecting to server at: ${serverUrl}`);
+    console.log(`Attempting to connect to server at: ${serverUrl}`);
 
-    // Connect to the Socket.IO server
+    // Connect to the Socket.IO server with better error handling
     const manager = new Manager(serverUrl, {
       reconnectionDelayMax: 10000,
       reconnectionAttempts: 10,
+      timeout: 10000,
       transports: ["websocket", "polling"],
       path: serverUrl.includes("/api/socket") ? "/api/socket" : undefined,
     });
@@ -180,28 +190,45 @@ function App() {
 
     const newSocket = manager.socket("/");
 
+    // Set up a timeout for connection attempts
+    const connectionTimeout = setTimeout(() => {
+      if (connecting) {
+        console.error("Connection attempt timed out after 10 seconds");
+        setConnectionError(
+          "Connection timed out. The game server might be unavailable right now. Please try again later."
+        );
+        setConnecting(false);
+      }
+    }, 10000);
+
     // Connection event handlers
     newSocket.on("connect", () => {
       console.log("Connected to server with ID:", newSocket.id);
+      clearTimeout(connectionTimeout);
       setConnecting(false);
       setConnectionError(null);
     });
 
     newSocket.on("connect_error", (error: Error) => {
       console.error("Connection error:", error);
-      setConnectionError(`Connection error: ${error.message}`);
+      setConnectionError(
+        `Connection error: ${error.message}. The game server might be offline or unreachable.`
+      );
       setConnecting(false);
+      clearTimeout(connectionTimeout);
     });
 
     newSocket.on("error", (error: Error) => {
       console.error("Socket error:", error);
       setConnectionError(`Socket error: ${error.message}`);
+      clearTimeout(connectionTimeout);
     });
 
     newSocket.on("disconnect", (reason: string) => {
       console.log("Disconnected from server:", reason);
       setRoomInfo(null);
       setConnectionError(`Disconnected: ${reason}`);
+      clearTimeout(connectionTimeout);
     });
 
     // Listen for welcome message
@@ -300,11 +327,114 @@ function App() {
     // Store the socket instance
     setSocket(newSocket);
 
-    // Clean up the socket connection when component unmounts
+    // Clean up the socket connection and timeout when component unmounts
     return () => {
+      clearTimeout(connectionTimeout);
       newSocket.disconnect();
     };
   }, []);
+
+  // Function to start offline mode (single player without server)
+  const startOfflineMode = useCallback(() => {
+    setOfflineMode(true);
+    setConnecting(false);
+    setConnectionError(null);
+
+    console.log("Starting offline mode");
+
+    // Initialize game state locally
+    const emptBoard = createEmptyBoard() as unknown as number[][];
+    const initialPiece = getRandomPiece();
+    const nextPiece = getRandomPiece();
+
+    setGameState({
+      status: GameStatus.PLAYING,
+      board: emptBoard,
+      currentPiece: initialPiece,
+      nextPiece: nextPiece,
+      heldPiece: null,
+      canHold: true,
+      pieceQueue: [getRandomPiece(), getRandomPiece(), getRandomPiece()],
+      players: [],
+      player: {
+        id: "offline-player",
+        name: playerName || "Player",
+        score: 0,
+        level: 1,
+        lines: 0,
+      },
+      opponents: [],
+      lastDropTime: Date.now(),
+      dropInterval: 800,
+    });
+
+    setGameMode("offline");
+  }, [playerName]);
+
+  // Function to handle player actions in offline mode
+  const handleOfflineAction = useCallback((action: PlayerAction) => {
+    // Implementation of offline action handling would go here
+    // This would need to replicate server-side game logic for piece movement, collision detection, etc.
+    console.log(`Offline action: ${action}`);
+
+    // This is a simplified version - a full implementation would be more complex
+    if (action === PlayerAction.DROP) {
+      // Example logic - advance to next piece when dropping
+      setGameState((prev) => {
+        // In a real implementation, this would handle board updates, scoring, etc.
+        const nextPiece = getRandomPiece();
+        return {
+          ...prev,
+          currentPiece: prev.nextPiece,
+          nextPiece: nextPiece,
+          pieceQueue: [...prev.pieceQueue.slice(1), getRandomPiece()],
+        };
+      });
+    }
+  }, []);
+
+  // Function to generate a random Tetris piece for offline mode
+  function getRandomPiece(): Piece {
+    const types: TetrominoType[] = ["I", "O", "T", "S", "Z", "J", "L"];
+    const type = types[Math.floor(Math.random() * types.length)];
+
+    // Simplified piece shapes
+    const shapes: Record<TetrominoType, number[][]> = {
+      I: [[1, 1, 1, 1]],
+      O: [
+        [1, 1],
+        [1, 1],
+      ],
+      T: [
+        [0, 1, 0],
+        [1, 1, 1],
+      ],
+      S: [
+        [0, 1, 1],
+        [1, 1, 0],
+      ],
+      Z: [
+        [1, 1, 0],
+        [0, 1, 1],
+      ],
+      J: [
+        [1, 0, 0],
+        [1, 1, 1],
+      ],
+      L: [
+        [0, 0, 1],
+        [1, 1, 1],
+      ],
+    };
+
+    return {
+      type,
+      shape: shapes[type],
+      position: { x: 3, y: 0 },
+      color: PIECE_COLORS[type],
+      rotation: 0,
+    };
+  }
 
   // Initialize socket on first load
   useEffect(() => {
@@ -314,13 +444,16 @@ function App() {
   // Handle player actions with a callback to avoid recreating it on each render
   const handlePlayerAction = useCallback(
     (action: PlayerAction) => {
-      if (socket) {
+      if (offlineMode) {
+        // Use offline action handler
+        handleOfflineAction(action);
+      } else if (socket) {
         // Emit the action to the server
         socket.emit("playerAction", { type: action });
         console.log(`Emitted ${action} action to server`);
       }
     },
-    [socket]
+    [socket, offlineMode, handleOfflineAction]
   );
 
   // Handle keyboard input
@@ -463,9 +596,38 @@ function App() {
                 socket?.connected ? "bg-green-400 animate-pulse" : "bg-red-400"
               }`}
             ></span>
-            {socket?.connected ? "Connected" : "Disconnected"}
+            {socket?.connected
+              ? "Connected"
+              : connecting
+              ? "Connecting..."
+              : "Disconnected"}
           </p>
         </div>
+
+        {connectionError && (
+          <div className="mt-2 p-3 bg-red-500/10 border border-red-500/20 rounded-md text-red-300 text-sm">
+            <p className="font-medium">Connection Issue</p>
+            <p>{connectionError}</p>
+            {connectionError.includes("server might be offline") && (
+              <div className="mt-2">
+                <p>Possible solutions:</p>
+                <ul className="list-disc list-inside mt-1 text-xs">
+                  <li>Refresh the page and try again</li>
+                  <li>
+                    The game server may be temporarily down for maintenance
+                  </li>
+                  <li>Try again later when the server is back up</li>
+                </ul>
+                <button
+                  onClick={initializeConnection}
+                  className="mt-2 px-3 py-1 bg-red-500/20 hover:bg-red-500/30 rounded text-xs font-medium transition-colors"
+                >
+                  Try Connecting Again
+                </button>
+              </div>
+            )}
+          </div>
+        )}
 
         {gameState.status === GameStatus.GAME_OVER && (
           <div className="text-center text-xl text-red-500 mt-2 p-2 bg-red-500/10 rounded-md border border-red-500/20 animate-pulse-fast">
@@ -475,10 +637,155 @@ function App() {
       </header>
 
       <main className="max-w-6xl mx-auto mt-4">
-        {/* Game start screen - shown when not playing */}
-        {(gameState.status === GameStatus.WAITING ||
-          gameState.status === GameStatus.GAME_OVER) &&
-          !roomInfo && (
+        {/* Show fallback content when disconnected */}
+        {!socket?.connected && !connecting && !offlineMode && (
+          <div className="text-center py-10 px-4">
+            <div className="w-20 h-20 mx-auto mb-4 text-gray-400">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={1.5}
+                  d="M18.364 5.636a9 9 0 0 1 0 12.728m-3.536-3.536a4 4 0 0 1-5.656-5.656m8.334 2.121a7 7 0 0 1-9.9-9.9"
+                />
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={1.5}
+                  d="M3 3l18 18"
+                />
+              </svg>
+            </div>
+            <h2 className="text-2xl font-bold text-gray-300 mb-2">
+              Server Connection Failed
+            </h2>
+            <p className="text-gray-400 max-w-md mx-auto mb-4">
+              We're having trouble connecting to the game server. This usually
+              happens when the server is down or undergoing maintenance.
+            </p>
+            <div className="space-y-3">
+              <button
+                onClick={initializeConnection}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-md text-white font-medium transition-colors"
+              >
+                Retry Connection
+              </button>
+
+              <div className="flex items-center justify-center text-gray-400 text-sm">
+                <div className="h-px bg-gray-700 w-12 mr-3"></div>
+                <span>or</span>
+                <div className="h-px bg-gray-700 w-12 ml-3"></div>
+              </div>
+
+              <div>
+                <button
+                  onClick={() => {
+                    const name = prompt(
+                      "Enter your name for offline mode:",
+                      "Player"
+                    );
+                    if (name) {
+                      setPlayerName(name);
+                      startOfflineMode();
+                    }
+                  }}
+                  className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-md text-white font-medium transition-colors"
+                >
+                  Play Offline Mode
+                </button>
+                <p className="mt-2 text-xs text-gray-500">
+                  Limited functionality in offline mode
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Show offline mode banner when playing offline */}
+        {offlineMode && (
+          <div className="mb-4 p-2 bg-yellow-500/10 border border-yellow-500/20 rounded-md text-yellow-300 text-sm text-center">
+            <p>
+              Playing in offline mode. Multiplayer features are not available.
+            </p>
+          </div>
+        )}
+
+        {/* Show loading spinner when connecting */}
+        {connecting && (
+          <div className="text-center py-10">
+            <div className="w-16 h-16 mx-auto mb-4">
+              <div className="w-full h-full rounded-full border-4 border-blue-200 border-t-blue-500 animate-spin"></div>
+            </div>
+            <p className="text-lg text-gray-300">
+              Connecting to game server...
+            </p>
+          </div>
+        )}
+
+        {/* Game board - show in both normal and offline mode */}
+        {((socket?.connected && gameState.status === GameStatus.PLAYING) ||
+          (offlineMode && gameState.status === GameStatus.PLAYING)) && (
+          <div
+            className={`flex ${
+              hasOpponents ? "justify-between" : "justify-center"
+            } gap-8 flex-wrap`}
+          >
+            {/* Main player's game board */}
+            <div className="flex flex-col items-center">
+              <div className="flex justify-between items-start w-full mb-2">
+                <div className="flex flex-col">
+                  <ScoreDisplay
+                    score={gameState.player.score}
+                    level={gameState.player.level}
+                    lines={gameState.player.lines}
+                  />
+                  <LevelDisplay
+                    level={gameState.player.level}
+                    lines={gameState.player.lines}
+                    linesPerLevel={LINES_PER_LEVEL}
+                    dropInterval={gameState.dropInterval}
+                  />
+                </div>
+                <div className="flex flex-col gap-2">
+                  <PiecePreview piece={gameState.nextPiece} title="Next" />
+                  <PiecePreview
+                    piece={gameState.heldPiece}
+                    title="Hold"
+                    disabled={!gameState.canHold}
+                  />
+                </div>
+              </div>
+
+              <GameBoard
+                board={gameState.board}
+                currentPiece={gameState.currentPiece}
+                ghostPiecePosition={ghostPosition}
+                clearedLines={clearedLines}
+              />
+            </div>
+
+            {/* Opponents' boards (only in connected multiplayer mode) */}
+            {hasOpponents && !offlineMode && (
+              <div className="flex flex-wrap gap-4 justify-center">
+                {gameState.opponents?.map((opponent) => (
+                  <OpponentBoard key={opponent.id} opponent={opponent} />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Game start screen - shown when not playing but connected */}
+        {socket?.connected &&
+          (gameState.status === GameStatus.WAITING ||
+            gameState.status === GameStatus.GAME_OVER) &&
+          !roomInfo &&
+          !offlineMode && (
             <div className="flex flex-col items-center justify-center h-[70vh]">
               <div className="text-4xl font-bold mb-8 text-center text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-300">
                 Welcome to Tetris Multiplayer
@@ -667,216 +974,6 @@ function App() {
               )}
             </div>
           )}
-
-        {/* Only show game content when playing */}
-        {gameState.status === GameStatus.PLAYING && (
-          <>
-            {/* Garbage notification */}
-            {garbageNotification && (
-              <div className="fixed top-4 right-4 bg-red-600 text-white px-4 py-2 rounded-md shadow-lg z-50 animate-shake">
-                <div className="flex items-center">
-                  <svg
-                    className="w-5 h-5 mr-2"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                    xmlns="http://www.w3.org/2000/svg"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-                    />
-                  </svg>
-                  <p className="font-bold">
-                    {garbageNotification.fromPlayer} sent you{" "}
-                    {garbageNotification.lineCount} garbage lines!
-                  </p>
-                </div>
-              </div>
-            )}
-
-            {/* Room information */}
-            {roomInfo && (
-              <div className="mb-6 w-full">
-                <RoomInfo
-                  roomId={roomInfo.id}
-                  roomName={roomInfo.name}
-                  playerCount={roomInfo.players.length}
-                  maxPlayers={roomInfo.maxPlayers}
-                />
-              </div>
-            )}
-
-            <div className="flex flex-col lg:flex-row gap-6 items-center lg:items-start justify-center">
-              {/* Game area - main section */}
-              <div className="flex flex-col sm:flex-row gap-4">
-                {/* Left side - Held piece and level */}
-                <div className="flex flex-col gap-4 order-2 sm:order-1">
-                  <PiecePreview
-                    piece={gameState.heldPiece}
-                    title="Hold"
-                    disabled={!gameState.canHold}
-                  />
-
-                  <LevelDisplay
-                    level={gameState.player.level}
-                    lines={gameState.player.lines}
-                    linesPerLevel={LINES_PER_LEVEL}
-                    dropInterval={gameState.dropInterval}
-                  />
-                </div>
-
-                {/* Center - Game board - Make it larger */}
-                <div className="w-full max-w-xs sm:max-w-md order-1 sm:order-2">
-                  <GameBoard
-                    board={gameState.board}
-                    currentPiece={
-                      gameState.currentPiece
-                        ? {
-                            ...gameState.currentPiece,
-                            color: getPieceGradient(
-                              gameState.currentPiece.type
-                            ),
-                          }
-                        : null
-                    }
-                    ghostPiecePosition={ghostPosition}
-                    clearedLines={clearedLines}
-                  />
-
-                  {/* Controls on small screens only */}
-                  <div className="mt-6 sm:hidden grid grid-cols-3 gap-3 w-full">
-                    <button
-                      className="bg-slate-700 hover:bg-slate-600 active:bg-slate-500 p-3 rounded-md disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                      onClick={() => handlePlayerAction(PlayerAction.MOVE_LEFT)}
-                      disabled={gameState.status !== GameStatus.PLAYING}
-                    >
-                      ←
-                    </button>
-                    <button
-                      className="bg-slate-700 hover:bg-slate-600 active:bg-slate-500 p-3 rounded-md disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                      onClick={() => handlePlayerAction(PlayerAction.MOVE_DOWN)}
-                      disabled={gameState.status !== GameStatus.PLAYING}
-                    >
-                      ↓
-                    </button>
-                    <button
-                      className="bg-slate-700 hover:bg-slate-600 active:bg-slate-500 p-3 rounded-md disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                      onClick={() =>
-                        handlePlayerAction(PlayerAction.MOVE_RIGHT)
-                      }
-                      disabled={gameState.status !== GameStatus.PLAYING}
-                    >
-                      →
-                    </button>
-                    <button
-                      className="bg-slate-700 hover:bg-slate-600 active:bg-slate-500 p-3 rounded-md disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                      onClick={() => handlePlayerAction(PlayerAction.ROTATE)}
-                      disabled={gameState.status !== GameStatus.PLAYING}
-                    >
-                      Rotate
-                    </button>
-                    <button
-                      className="bg-slate-700 hover:bg-slate-600 active:bg-slate-500 p-3 rounded-md disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                      onClick={() => handlePlayerAction(PlayerAction.HOLD)}
-                      disabled={
-                        gameState.status !== GameStatus.PLAYING ||
-                        !gameState.canHold
-                      }
-                    >
-                      Hold
-                    </button>
-                    <button
-                      className="bg-slate-700 hover:bg-slate-600 active:bg-slate-500 p-3 rounded-md disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                      onClick={() => handlePlayerAction(PlayerAction.DROP)}
-                      disabled={gameState.status !== GameStatus.PLAYING}
-                    >
-                      Drop
-                    </button>
-                  </div>
-                </div>
-
-                {/* Right side - Next piece and score */}
-                <div className="flex flex-col gap-4 order-3">
-                  <PiecePreview piece={gameState.nextPiece} title="Next" />
-
-                  <ScoreDisplay
-                    score={gameState.player.score}
-                    level={gameState.player.level}
-                    lines={gameState.player.lines}
-                  />
-                </div>
-              </div>
-
-              {/* Opponents section - side or below based on screen size */}
-              {hasOpponents && (
-                <div className="mt-6 lg:mt-0 max-w-md lg:max-w-xs w-full">
-                  <h2 className="text-lg font-medium mb-3 px-1 text-slate-300">
-                    Opponents
-                  </h2>
-                  <div className="grid grid-cols-2 gap-4">
-                    {gameState.opponents &&
-                      gameState.opponents.map((opponent: OpponentData) => (
-                        <OpponentBoard key={opponent.id} opponent={opponent} />
-                      ))}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <div className="mt-8 max-w-3xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Game info and controls */}
-              <div className="bg-slate-800 p-4 rounded-md shadow-md border border-slate-700">
-                <h2 className="text-lg font-medium mb-3 text-slate-200">
-                  Controls
-                </h2>
-                <div className="grid grid-cols-2 gap-3 text-sm">
-                  <div className="flex items-center">
-                    <span className="inline-block w-8 h-8 mr-2 bg-slate-700 rounded flex items-center justify-center border border-slate-600">
-                      ←
-                    </span>
-                    <span>Move Left</span>
-                  </div>
-                  <div className="flex items-center">
-                    <span className="inline-block w-8 h-8 mr-2 bg-slate-700 rounded flex items-center justify-center border border-slate-600">
-                      →
-                    </span>
-                    <span>Move Right</span>
-                  </div>
-                  <div className="flex items-center">
-                    <span className="inline-block w-8 h-8 mr-2 bg-slate-700 rounded flex items-center justify-center border border-slate-600">
-                      ↑
-                    </span>
-                    <span>Rotate</span>
-                  </div>
-                  <div className="flex items-center">
-                    <span className="inline-block w-8 h-8 mr-2 bg-slate-700 rounded flex items-center justify-center border border-slate-600">
-                      ↓
-                    </span>
-                    <span>Soft Drop</span>
-                  </div>
-                  <div className="flex items-center">
-                    <span className="inline-block w-8 h-8 mr-2 bg-slate-700 rounded flex items-center justify-center border border-slate-600 text-xs">
-                      Space
-                    </span>
-                    <span>Hard Drop</span>
-                  </div>
-                  <div className="flex items-center">
-                    <span className="inline-block w-8 h-8 mr-2 bg-slate-700 rounded flex items-center justify-center border border-slate-600 text-xs">
-                      Shift
-                    </span>
-                    <span>Hold Piece</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Scoring system */}
-              <ScoringInfo />
-            </div>
-          </>
-        )}
       </main>
     </div>
   );
