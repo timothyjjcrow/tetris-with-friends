@@ -1,6 +1,8 @@
 // This is the standalone API route that will be used by Vercel for WebSocket connections
 import { Server } from "socket.io";
 
+// We need to set up a socket.io server on a Next.js or Vercel API Route
+// This implementation provides a fallback Socket.IO server for local testing
 export default function SocketHandler(req, res) {
   // Check if Socket.IO server already exists
   if (res.socket.server.io) {
@@ -41,6 +43,16 @@ export default function SocketHandler(req, res) {
         score: 0,
         level: 1,
         lines: 0,
+      });
+
+      // Emit a welcome message to let them know they've connected
+      socket.emit("welcome", { message: "Connected to fallback game server" });
+
+      // Notify that this is a fallback socket server
+      socket.emit("notification", {
+        type: "warning",
+        message:
+          "This is a fallback WebSocket server. For multiplayer functionality, please use the deployed server.",
       });
 
       // Send initial game state

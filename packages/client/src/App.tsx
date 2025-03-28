@@ -145,11 +145,23 @@ function App() {
 
     // Determine the appropriate server URL based on environment
     const isProduction = window.location.hostname !== "localhost";
-    let serverUrl = "http://localhost:3001";
+    let serverUrl: string;
 
     if (isProduction) {
-      // Use relative URL in production which will be handled by our API route
-      serverUrl = window.location.origin;
+      // Use environment variable if available
+      const envServerUrl = import.meta.env.VITE_SERVER_URL;
+      if (envServerUrl) {
+        serverUrl = envServerUrl;
+        console.log(`Using server URL from environment: ${serverUrl}`);
+      } else {
+        // Fallback to a deployed server
+        serverUrl = "https://tetris-with-friends-server.onrender.com";
+        console.log(`Using fallback server URL: ${serverUrl}`);
+      }
+    } else {
+      // Local development
+      serverUrl = "http://localhost:3001";
+      console.log(`Using local server URL: ${serverUrl}`);
     }
 
     console.log(`Connecting to server at: ${serverUrl}`);
@@ -159,8 +171,13 @@ function App() {
       reconnectionDelayMax: 10000,
       reconnectionAttempts: 10,
       transports: ["websocket", "polling"],
-      path: isProduction ? "/api/socket" : undefined,
+      path: serverUrl.includes("/api/socket") ? "/api/socket" : undefined,
     });
+
+    console.log(
+      `Socket.IO Manager created with path: ${manager.opts.path || "/"}`
+    );
+
     const newSocket = manager.socket("/");
 
     // Connection event handlers
@@ -176,10 +193,25 @@ function App() {
       setConnecting(false);
     });
 
+    newSocket.on("error", (error: Error) => {
+      console.error("Socket error:", error);
+      setConnectionError(`Socket error: ${error.message}`);
+    });
+
     newSocket.on("disconnect", (reason: string) => {
       console.log("Disconnected from server:", reason);
       setRoomInfo(null);
       setConnectionError(`Disconnected: ${reason}`);
+    });
+
+    // Listen for welcome message
+    newSocket.on("welcome", (data: any) => {
+      console.log("Received welcome message:", data);
+    });
+
+    // Listen for notification messages
+    newSocket.on("notification", (data: any) => {
+      console.log("Received notification:", data);
     });
 
     // Listen for game state updates
@@ -872,45 +904,39 @@ function getPieceGradient(type: TetrominoType): string {
   }
 }
 
-// Helper function to calculate ghost piece position
+// Function to calculate ghost piece position
 function calculateGhostPosition(piece: Piece, board: number[][]): number {
-  let testY = piece.position.y;
+  if (!piece) return 0;
 
-  // Move the piece down until it collides
-  while (testY < board.length) {
-    let collision = false;
+  let yPos = piece.position.y;
+  let collision = false;
 
-    // Check for collisions
+  while (!collision) {
+    yPos++;
+
+    // Check for collision with the bottom of the board
+    if (yPos + piece.shape.length > 20) {
+      collision = true;
+      break;
+    }
+
+    // Check for collision with existing pieces on the board
     for (let y = 0; y < piece.shape.length; y++) {
       for (let x = 0; x < piece.shape[y].length; x++) {
-        if (piece.shape[y][x] !== 0) {
-          const boardX = piece.position.x + x;
-          const boardY = testY + y;
-
-          // Check if out of bounds or colliding with another piece
-          if (
-            boardY >= board.length ||
-            boardX < 0 ||
-            boardX >= board[0].length ||
-            (boardY >= 0 && board[boardY][boardX] !== 0)
-          ) {
-            collision = true;
-            break;
-          }
+        if (
+          piece.shape[y][x] &&
+          board[yPos + y] &&
+          board[yPos + y][piece.position.x + x] !== 0
+        ) {
+          collision = true;
+          break;
         }
       }
       if (collision) break;
     }
-
-    if (collision) {
-      testY--; // Move back up one step
-      break;
-    }
-
-    testY++;
   }
 
-  return testY;
+  return yPos - 1;
 }
 
 export default App;
