@@ -23,7 +23,12 @@
     /* Path Mapping */
     "baseUrl": ".",
     "paths": {
-      "@tetris/types": ["../types/dist"]
+      "@tetris/types": [
+        "../types/dist",
+        "../types/src",
+        "../../node_modules/@tetris/types",
+        "../../node_modules/@tetris/types/dist"
+      ]
     }
   },
   "include": ["src"],
