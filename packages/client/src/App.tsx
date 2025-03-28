@@ -417,6 +417,66 @@ function App() {
     socket.on("gameState", handleGameState);
     socket.on("gameStarting", handleGameStarting);
 
+    // Add handler for opponent updates
+    socket.on(
+      "opponentUpdate",
+      ({
+        playerId,
+        gameState,
+      }: {
+        playerId: string;
+        gameState: {
+          status: string;
+          board: number[][];
+          player: {
+            id: string;
+            name: string;
+            score: number;
+            level: number;
+            lines: number;
+          };
+        };
+      }) => {
+        console.log(`Received update from opponent ${playerId}`);
+
+        // Update the specific opponent's state
+        setGameState((prevState) => {
+          // Make sure opponents array exists
+          if (!prevState.opponents) {
+            return prevState; // No change if no opponents
+          }
+
+          // Find the opponent that sent the update
+          const opponentIndex = prevState.opponents.findIndex(
+            (opponent) => opponent.id === playerId
+          );
+
+          if (opponentIndex === -1) {
+            return prevState; // Opponent not found
+          }
+
+          // Convert number[][] board to boolean[][] for the opponent
+          // A cell is "true" if it has any non-zero value
+          const booleanBoard = gameState.board.map((row) =>
+            row.map((cell) => cell !== 0)
+          );
+
+          // Create a new array of opponents with the updated one
+          const updatedOpponents = [...prevState.opponents];
+          updatedOpponents[opponentIndex] = {
+            ...updatedOpponents[opponentIndex],
+            ...gameState.player, // Update player info
+            board: booleanBoard, // Use the converted boolean board
+          };
+
+          return {
+            ...prevState,
+            opponents: updatedOpponents,
+          };
+        });
+      }
+    );
+
     // Clean up all listeners when component unmounts or socket changes
     return () => {
       console.log("Cleaning up socket event listeners");
@@ -431,6 +491,7 @@ function App() {
       socket.off("error", handleSocketError);
       socket.off("gameState", handleGameState);
       socket.off("gameStarting", handleGameStarting);
+      socket.off("opponentUpdate"); // Clean up the new listener
     };
   }, [socket, gameState.player.lines, gameState.board]);
 
