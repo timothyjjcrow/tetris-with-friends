@@ -9,12 +9,19 @@
     "build": "npm run build:types && npm run build:server",
     "build:types": "cd packages/types && npm run build",
     "build:server": "cd packages/server && npm run build",
+    "build:client": "cd packages/client && npm run build",
+    "build:all": "npm run build:types && npm run build:client",
     "dev:server": "cd packages/server && npm run dev",
+    "dev:client": "cd packages/client && npm run dev",
     "start:server": "cd packages/server && npm run start",
-    "install:all": "npm install && npm run build:types"
+    "install:all": "npm install && npm run build:types",
+    "vercel-build": "npm run build:all"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "description": "Multiplayer Tetris Monorepo"
+  "description": "Multiplayer Tetris Monorepo",
+  "engines": {
+    "node": ">=16.0.0"
+  }
 }

@@ -141,11 +141,23 @@ function App() {
     setConnecting(true);
     setConnectionError(null);
 
+    // Determine the appropriate server URL based on environment
+    const isProduction = window.location.hostname !== "localhost";
+    let serverUrl = "http://localhost:3001";
+
+    if (isProduction) {
+      // Use relative URL in production which will be handled by our API route
+      serverUrl = window.location.origin;
+    }
+
+    console.log(`Connecting to server at: ${serverUrl}`);
+
     // Connect to the Socket.IO server
-    const manager = new Manager("http://localhost:3001", {
+    const manager = new Manager(serverUrl, {
       reconnectionDelayMax: 10000,
       reconnectionAttempts: 10,
       transports: ["websocket", "polling"],
+      path: isProduction ? "/api/socket" : undefined,
     });
     const newSocket = manager.socket("/");
 

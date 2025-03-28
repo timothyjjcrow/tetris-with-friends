@@ -21,7 +21,7 @@ A real-time multiplayer Tetris game built with React, Socket.IO, and TypeScript.
 
 ### Prerequisites
 
-- Node.js 14+ and npm
+- Node.js 16+ and npm
 
 ### Installation
 
@@ -35,7 +35,7 @@ A real-time multiplayer Tetris game built with React, Socket.IO, and TypeScript.
 2. Install dependencies
 
    ```
-   npm install
+   npm run install:all
    ```
 
 3. Start the development servers
@@ -45,11 +45,37 @@ A real-time multiplayer Tetris game built with React, Socket.IO, and TypeScript.
    npm run dev:server
 
    # In another terminal, start the client
-   cd packages/client
-   npm run dev
+   npm run dev:client
    ```
 
 4. Open your browser and navigate to `http://localhost:3000`
+
+## Deployment
+
+### Deploying to Vercel
+
+The project is configured for easy deployment to Vercel.
+
+1. Fork this repository or push your changes to your GitHub account
+
+2. Create a new project in Vercel and connect your GitHub repository
+
+3. Use the following settings in Vercel:
+
+   - **Framework Preset**: Vite
+   - **Build Command**: `npm run build:all`
+   - **Output Directory**: `packages/client/dist`
+   - **Install Command**: `npm run install:all`
+
+4. Add the following environment variables in Vercel:
+
+   - `NODE_ENV`: `production`
+
+5. Deploy!
+
+### Using the Deployed Version
+
+The game is deployed at: [https://tetris-with-friends.vercel.app](https://github.com/timothyjjcrow/tetris-with-friends)
 
 ## Game Controls
 
