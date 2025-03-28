@@ -518,6 +518,79 @@ function App() {
     [socket]
   );
 
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleWelcome = (data: any) => {
+      console.log("Received welcome message:", data);
+    };
+
+    const handleRoomUpdate = (rooms: any) => {
+      console.log("Received rooms update:", rooms);
+    };
+
+    const handleGameState = (gameState: any) => {
+      console.log("Received game state:", gameState);
+      setGameState((prevState) => ({
+        ...prevState,
+        ...gameState,
+        // Make sure the state has the correct status format
+        status:
+          gameState.status === "playing"
+            ? GameStatus.PLAYING
+            : gameState.status === "waiting"
+            ? GameStatus.WAITING
+            : gameState.status === "paused"
+            ? GameStatus.PAUSED
+            : gameState.status === "game_over"
+            ? GameStatus.GAME_OVER
+            : prevState.status,
+      }));
+    };
+
+    const handleGameStarting = (playerCount: number) => {
+      console.log(`Game starting with ${playerCount} players!`);
+    };
+
+    // Listen for various socket events
+    socket.on("welcome", handleWelcome);
+    socket.on("roomsUpdate", handleRoomUpdate);
+    socket.on("gameState", handleGameState);
+    socket.on("gameStarting", handleGameStarting);
+
+    return () => {
+      socket.off("welcome", handleWelcome);
+      socket.off("roomsUpdate", handleRoomUpdate);
+      socket.off("gameState", handleGameState);
+      socket.off("gameStarting", handleGameStarting);
+    };
+  }, [socket]);
+
+  // Handle keyboard input for debugging game start
+  useEffect(() => {
+    const debugKeyHandler = (event: KeyboardEvent) => {
+      // G key to force start a game
+      if (event.key.toLowerCase() === "g" && socket?.connected) {
+        console.log("Forcing game start with the debug key");
+
+        // Find a room this player is in
+        if (roomInfo?.id) {
+          console.log(`Starting game in room ${roomInfo.id}`);
+          socket.emit("startGame", roomInfo.id, (success: boolean) => {
+            console.log(`Game start result: ${success ? "success" : "failed"}`);
+          });
+        } else {
+          console.log("Not in a room, can't start game");
+        }
+      }
+    };
+
+    window.addEventListener("keydown", debugKeyHandler);
+    return () => {
+      window.removeEventListener("keydown", debugKeyHandler);
+    };
+  }, [socket, roomInfo]);
+
   return (
     <div
       className="min-h-screen text-white p-4 bg-gradient-to-b from-slate-900 to-slate-800 font-sans"
@@ -745,6 +818,7 @@ function App() {
                           return;
                         }
 
+                        console.log("Starting single player game with bot");
                         socket.emit(
                           "startSinglePlayerWithBot",
                           {
@@ -754,15 +828,14 @@ function App() {
                               `Player ${socket.id?.substring(0, 5)}`,
                           },
                           (success: boolean) => {
+                            console.log(
+                              `Single player start result: ${
+                                success ? "success" : "failed"
+                              }`
+                            );
                             if (success) {
-                              console.log(
-                                "Started single player game with bot"
-                              );
                               setGameMode("singleplayer");
                             } else {
-                              console.error(
-                                "Failed to start single player game"
-                              );
                               setConnectionError(
                                 "Failed to start game. Please try again."
                               );

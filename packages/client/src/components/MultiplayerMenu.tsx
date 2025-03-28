@@ -77,12 +77,43 @@ const MultiplayerMenu: React.FC<MultiplayerMenuProps> = ({
 
   const handleCreateRoom = () => {
     if (!playerName || !roomName) return;
-    onCreateRoom(roomName);
+
+    console.log(`Creating room with name: ${roomName}`);
+    if (socket) {
+      // The server expects roomName directly, not an object
+      socket.emit("createRoom", roomName, (roomId: string) => {
+        console.log(`Room created with ID: ${roomId}`);
+        if (roomId) {
+          // Now join the created room
+          socket.emit(
+            "joinRoom",
+            { roomId, playerName },
+            (success: boolean) => {
+              console.log(
+                `Join room result: ${success ? "success" : "failed"}`
+              );
+              if (success) {
+                onCreateRoom(roomName);
+              }
+            }
+          );
+        }
+      });
+    }
   };
 
   const handleJoinRoom = () => {
     if (!playerName || !roomId) return;
-    onJoinRoom(roomId, playerName);
+
+    console.log(`Joining room with ID: ${roomId}`);
+    if (socket) {
+      socket.emit("joinRoom", { roomId, playerName }, (success: boolean) => {
+        console.log(`Join room result: ${success ? "success" : "failed"}`);
+        if (success) {
+          onJoinRoom(roomId, playerName);
+        }
+      });
+    }
   };
 
   const handleStartGame = () => {
