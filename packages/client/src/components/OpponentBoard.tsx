@@ -17,11 +17,23 @@ interface OpponentBoardProps {
 // Type definition for a board cell
 type BoardCell = number;
 
+// Map of piece values to piece types for coloring
+const PIECE_VALUE_TO_TYPE: Record<number, string> = {
+  1: "I",
+  2: "O",
+  3: "T",
+  4: "L",
+  5: "J",
+  6: "S",
+  7: "Z",
+};
+
 const OpponentBoard: React.FC<OpponentBoardProps> = ({ opponent }) => {
   const { name, score, level, status, currentPiece } = opponent;
 
-  // Cast board to the right type
-  const board = opponent.board as unknown as BoardCell[][];
+  // Cast board to the right type - could be boolean[][] from old server or number[][] from new server
+  // Handle both formats gracefully
+  const board = opponent.board as unknown as (boolean | number)[][];
 
   // Get cell size based on board dimensions
   const CELL_SIZE = 6; // Small cells for the opponent board
@@ -52,14 +64,28 @@ const OpponentBoard: React.FC<OpponentBoardProps> = ({ opponent }) => {
   };
 
   // Function to determine cell styling
-  const getCellStyle = (cell: BoardCell, x: number, y: number) => {
+  const getCellStyle = (cell: boolean | number, x: number, y: number) => {
     const isPieceHere = hasPiece(x, y);
-    const isActive = cell !== 0 || isPieceHere;
+    // Check if cell is active (either a boolean true or a non-zero number)
+    const isActive =
+      (typeof cell === "boolean" && cell === true) ||
+      (typeof cell === "number" && cell !== 0);
+
+    // Get the appropriate color based on cell value
+    let cellColor = pieceColor;
+    if (typeof cell === "number" && cell > 0) {
+      const pieceType = PIECE_VALUE_TO_TYPE[cell] || "I";
+      cellColor = getPieceGradient(pieceType as any);
+    }
 
     return {
       width: CELL_SIZE,
       height: CELL_SIZE,
-      background: isActive ? pieceColor : COLORS.board.emptyCell,
+      background: isActive
+        ? isPieceHere
+          ? pieceColor
+          : cellColor
+        : COLORS.board.emptyCell,
       boxShadow: isActive
         ? "inset 1px 1px 1px rgba(255,255,255,0.2), inset -1px -1px 1px rgba(0,0,0,0.2)"
         : "",
@@ -93,9 +119,13 @@ const OpponentBoard: React.FC<OpponentBoardProps> = ({ opponent }) => {
             gridTemplateRows: `repeat(${board.length}, ${CELL_SIZE}px)`,
           }}
         >
-          {board.map((row: BoardCell[], rowIndex: number) =>
-            row.map((cell: BoardCell, colIndex: number) => {
-              const isActive = cell !== 0 || hasPiece(colIndex, rowIndex);
+          {board.map((row, rowIndex: number) =>
+            row.map((cell, colIndex: number) => {
+              // Check if cell is active (either a boolean true or a non-zero number)
+              const isActive =
+                (typeof cell === "boolean" && cell === true) ||
+                (typeof cell === "number" && cell !== 0) ||
+                hasPiece(colIndex, rowIndex);
 
               return (
                 <div

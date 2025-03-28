@@ -455,18 +455,13 @@ function App() {
             return prevState; // Opponent not found
           }
 
-          // Convert number[][] board to boolean[][] for the opponent
-          // A cell is "true" if it has any non-zero value
-          const booleanBoard = gameState.board.map((row) =>
-            row.map((cell) => cell !== 0)
-          );
-
           // Create a new array of opponents with the updated one
           const updatedOpponents = [...prevState.opponents];
           updatedOpponents[opponentIndex] = {
             ...updatedOpponents[opponentIndex],
             ...gameState.player, // Update player info
-            board: booleanBoard, // Use the converted boolean board
+            board: gameState.board as any, // Force the type to be compatible
+            status: (gameState.status as GameStatus) || GameStatus.PLAYING,
           };
 
           return {

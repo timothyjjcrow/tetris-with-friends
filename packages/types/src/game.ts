@@ -72,6 +72,6 @@ export interface OpponentData {
   level: number;
   lines: number;
   status: GameStatus;
-  board: boolean[][]; // Simplified board representation (filled/empty cells)
+  board: boolean[][] | number[][]; // Support both boolean and number board formats
   currentPiece: OpponentPiece | null;
 }
