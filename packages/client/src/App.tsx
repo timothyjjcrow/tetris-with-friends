@@ -4,9 +4,7 @@ import GameBoard from "./components/GameBoard";
 import { PiecePreview } from "./components/PiecePreview";
 import ScoreDisplay from "./components/ScoreDisplay";
 import LevelDisplay from "./components/LevelDisplay";
-import ScoringInfo from "./components/ScoringInfo";
 import OpponentBoard from "./components/OpponentBoard";
-import RoomInfo from "./components/RoomInfo";
 import MultiplayerMenu from "./components/MultiplayerMenu";
 import { createEmptyBoard } from "./utils/boardUtils";
 import { COLORS } from "./styles/colors";
@@ -98,7 +96,7 @@ function App() {
   const [roomInfo, setRoomInfo] = useState<RoomData | null>(null);
 
   // Garbage notification state
-  const [garbageNotification, setGarbageNotification] = useState<{
+  const [_garbageNotification, setGarbageNotification] = useState<{
     lineCount: number;
     fromPlayer: string;
     timestamp: number;
@@ -977,28 +975,6 @@ function App() {
       </main>
     </div>
   );
-}
-
-// Helper function to get piece gradient based on type
-function getPieceGradient(type: TetrominoType): string {
-  switch (type) {
-    case "I":
-      return "linear-gradient(135deg, #66F9F9 0%, #00CFCF 50%, #00A5A5 100%)";
-    case "O":
-      return "linear-gradient(135deg, #FFEB80 0%, #FFD500 50%, #CCAA00 100%)";
-    case "T":
-      return "linear-gradient(135deg, #CF66F9 0%, #9E00CF 50%, #7400A5 100%)";
-    case "L":
-      return "linear-gradient(135deg, #FFCB80 0%, #FF9000 50%, #CC7300 100%)";
-    case "J":
-      return "linear-gradient(135deg, #667DF9 0%, #0028CF 50%, #001EA5 100%)";
-    case "S":
-      return "linear-gradient(135deg, #66F989 0%, #00CF2F 50%, #00A525 100%)";
-    case "Z":
-      return "linear-gradient(135deg, #F9667D 0%, #CF0030 50%, #A50025 100%)";
-    default:
-      return "linear-gradient(135deg, #66F9F9 0%, #00CFCF 50%, #00A5A5 100%)";
-  }
 }
 
 // Function to calculate ghost piece position
