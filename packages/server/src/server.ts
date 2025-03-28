@@ -40,7 +40,7 @@ if (require.main === module) {
     cors({
       origin:
         process.env.NODE_ENV === "production"
-          ? [/\.vercel\.app$/, /localhost/] // Allow all Vercel subdomains and localhost
+          ? "*" // Allow all origins in production
           : [
               "http://localhost:3000",
               "http://127.0.0.1:3000",
@@ -64,7 +64,7 @@ if (require.main === module) {
     cors: {
       origin:
         process.env.NODE_ENV === "production"
-          ? [/\.vercel\.app$/, /localhost/] // Allow all Vercel subdomains and localhost
+          ? "*" // Allow all origins in production
           : [
               "http://localhost:3000",
               "http://127.0.0.1:3000",

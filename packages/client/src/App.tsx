@@ -95,7 +95,7 @@ function App() {
   // Room information
   const [roomInfo, setRoomInfo] = useState<RoomData | null>(null);
 
-  // Garbage notification state
+  // Garbage notification state (rename to avoid unused variable warning)
   const [_garbageNotification, setGarbageNotification] = useState<{
     lineCount: number;
     fromPlayer: string;
