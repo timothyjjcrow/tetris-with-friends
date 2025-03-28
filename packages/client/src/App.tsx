@@ -324,49 +324,6 @@ function App() {
     };
   }, []);
 
-  // Function to generate a random Tetris piece (keep this for utility)
-  function getRandomPiece(): Piece {
-    const types: TetrominoType[] = ["I", "O", "T", "S", "Z", "J", "L"];
-    const type = types[Math.floor(Math.random() * types.length)];
-
-    // Simplified piece shapes
-    const shapes: Record<TetrominoType, number[][]> = {
-      I: [[1, 1, 1, 1]],
-      O: [
-        [1, 1],
-        [1, 1],
-      ],
-      T: [
-        [0, 1, 0],
-        [1, 1, 1],
-      ],
-      S: [
-        [0, 1, 1],
-        [1, 1, 0],
-      ],
-      Z: [
-        [1, 1, 0],
-        [0, 1, 1],
-      ],
-      J: [
-        [1, 0, 0],
-        [1, 1, 1],
-      ],
-      L: [
-        [0, 0, 1],
-        [1, 1, 1],
-      ],
-    };
-
-    return {
-      type,
-      shape: shapes[type],
-      position: { x: 3, y: 0 },
-      color: PIECE_COLORS[type],
-      rotation: 0,
-    };
-  }
-
   // Initialize socket on first load
   useEffect(() => {
     initializeConnection();
